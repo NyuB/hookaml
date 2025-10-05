@@ -70,8 +70,6 @@ module Workspace = struct
   type t = item list [@@deriving sexp]
 end
 
-module FileSet = Set.Make (String)
-
 module Status = struct
   module Item = struct
     type t =
@@ -108,10 +106,6 @@ module Status = struct
 
   module ItemSet = Set.Make (Item)
 
-  type t = ItemSet.t
-
-  let sexp_of_t t = ItemSet.to_list t |> sexp_of_list Item.sexp_of_t
-
   let parse_git git_short_line =
     let starts_with prefix = String.starts_with ~prefix git_short_line
     and scanf fmt = Scanf.sscanf_opt git_short_line fmt in
@@ -140,59 +134,67 @@ let rec get_ref repo (r : Workspace.commit_ref) =
 
 (** Workspace status representation at a given instant *)
 module Show = struct
-  type t =
-    | Status_files of Status.t
-    | Files of FileSet.t
+  module Item = struct
+    type t =
+      | Status_file of Status.Item.t
+      | File of string
 
-  let sexp_of_t = function
-    | Status_files s -> Status.sexp_of_t s
-    | Files f -> sexp_of_list sexp_of_string (FileSet.to_list f)
-  ;;
+    let sexp_of_t = function
+      | Status_file f -> Status.Item.sexp_of_t f
+      | File f -> Sexplib.Sexp.Atom f
+    ;;
 
-  let union (a : t) (b : t) : t =
-    match a, b with
-    | Status_files a, Status_files b -> Status_files (Status.ItemSet.union a b)
-    | Files a, Files b -> Files (FileSet.union a b)
-    | Status_files a, Files b | Files b, Status_files a ->
-      let without_status =
-        Status.ItemSet.to_seq a |> Seq.map Status.Item.file |> FileSet.of_seq
-      in
-      Files (FileSet.union without_status b)
-  ;;
+    let compare a b =
+      match a, b with
+      | Status_file a, Status_file b -> Status.Item.compare a b
+      | File a, File b -> String.compare a b
+      | Status_file _, _ -> 1
+      | _, Status_file _ -> -1
+    ;;
+  end
+
+  module ItemSet = Set.Make (Item)
+
+  type t = ItemSet.t
+
+  let sexp_of_t t = sexp_of_list Item.sexp_of_t (ItemSet.to_list t)
+  let union (a : t) (b : t) : t = ItemSet.union a b
 end
 
 (* Actual execution *)
 
+let apply_predicate (p : Workspace.predicate) (s : Show.Item.t) : bool =
+  let as_string =
+    match s with
+    | File f -> f
+    | Status_file f -> Status.Item.file f
+  in
+  match p with
+  | Starts_with prefix -> String.starts_with ~prefix as_string
+  | Ends_with suffix -> String.ends_with ~suffix as_string
+;;
+
 let filter_show (p : Workspace.predicate) (s : Show.t) =
-  match s, p with
-  | Files fs, Starts_with prefix ->
-    Show.Files (FileSet.filter (String.starts_with ~prefix) fs)
-  | Files fs, Ends_with suffix ->
-    Show.Files (FileSet.filter (String.ends_with ~suffix) fs)
-  | Status_files sfs, Starts_with prefix ->
-    Show.Status_files
-      (Status.ItemSet.filter
-         (fun i -> String.starts_with ~prefix (Status.Item.file i))
-         sfs)
-  | Status_files sfs, Ends_with suffix ->
-    Show.Status_files
-      (Status.ItemSet.filter (fun i -> String.ends_with ~suffix (Status.Item.file i)) sfs)
+  Show.ItemSet.filter (apply_predicate p) s
 ;;
 
 let rec show repo (s : Workspace.show) : Show.t =
   match s with
-  | Worktree -> Status.of_git repo |> fun s -> Show.Status_files s
+  | Worktree ->
+    Status.of_git repo
+    |> Status.ItemSet.to_seq
+    |> Seq.map (fun s -> Show.Item.Status_file s)
+    |> Show.ItemSet.of_seq
   | Diff_files (a, b) ->
     Git.exec repo [| "diff"; "--name-only"; get_ref repo a; get_ref repo b |]
     |> String.split_on_char '\n'
     |> fun l ->
-    Show.Files
-      (FileSet.of_list
-         (List.filter_map
-            (function
-              | "" -> None
-              | s -> Some s)
-            l))
+    Show.ItemSet.of_list
+      (List.filter_map
+         (function
+           | "" -> None
+           | s -> Some (Show.Item.File s))
+         l)
   | Union (a, b) -> Show.union (show repo a) (show repo b)
   | Filter (p, s) -> filter_show p (show repo s)
 ;;
