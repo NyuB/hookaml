@@ -11,6 +11,3 @@
  (libraries sexplib unix)
  (preprocess
   (pps ppx_sexp_conv)))
-
-(cram
- (deps %{bin:gitst}))

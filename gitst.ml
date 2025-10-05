@@ -43,10 +43,16 @@ module Workspace = struct
       raise @@ Sexplib.Conv_error.stag_incorrect_n_args "commit_ref" "merge_base" sexp
   ;;
 
+  type predicate =
+    | Starts_with of string
+    | Ends_with of string
+  [@@deriving sexp]
+
   type show =
     | Worktree
     | Diff_files of commit_ref * commit_ref
     | Union of show * show
+    | Filter of predicate * show
   [@@deriving sexp]
 
   type projection =
@@ -157,6 +163,22 @@ end
 
 (* Actual execution *)
 
+let filter_show (p : Workspace.predicate) (s : Show.t) =
+  match s, p with
+  | Files fs, Starts_with prefix ->
+    Show.Files (FileSet.filter (String.starts_with ~prefix) fs)
+  | Files fs, Ends_with suffix ->
+    Show.Files (FileSet.filter (String.ends_with ~suffix) fs)
+  | Status_files sfs, Starts_with prefix ->
+    Show.Status_files
+      (Status.ItemSet.filter
+         (fun i -> String.starts_with ~prefix (Status.Item.file i))
+         sfs)
+  | Status_files sfs, Ends_with suffix ->
+    Show.Status_files
+      (Status.ItemSet.filter (fun i -> String.ends_with ~suffix (Status.Item.file i)) sfs)
+;;
+
 let rec show repo (s : Workspace.show) : Show.t =
   match s with
   | Worktree -> Status.of_git repo |> fun s -> Show.Status_files s
@@ -172,6 +194,7 @@ let rec show repo (s : Workspace.show) : Show.t =
               | s -> Some s)
             l))
   | Union (a, b) -> Show.union (show repo a) (show repo b)
+  | Filter (p, s) -> filter_show p (show repo s)
 ;;
 
 let status workspace =
