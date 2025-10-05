@@ -1,0 +1,5 @@
+(executable
+ (public_name hookaml)
+ (name hookaml)
+ (modules hookaml)
+ (libraries sexplib))
