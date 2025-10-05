@@ -3,3 +3,14 @@
  (name hookaml)
  (modules hookaml)
  (libraries sexplib))
+
+(executable
+ (public_name gitst)
+ (name gitst)
+ (modules gitst)
+ (libraries sexplib unix)
+ (preprocess
+  (pps ppx_sexp_conv)))
+
+(cram
+ (deps %{bin:gitst}))
