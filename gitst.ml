@@ -56,7 +56,11 @@ module Workspace = struct
     }
   [@@deriving sexp]
 
-  type item = Projection of projection [@@deriving sexp]
+  type item =
+    | Projection of projection
+    | Debug
+  [@@deriving sexp]
+
   type t = item list [@@deriving sexp]
 end
 
@@ -171,10 +175,11 @@ let rec show repo (s : Workspace.show) : Show.t =
 ;;
 
 let status workspace =
-  let projections =
+  let items_repr =
     List.map
       (fun (item : Workspace.item) ->
          match item with
+         | Debug -> Workspace.sexp_of_t workspace |> sexp_repr_long
          | Projection p ->
            Printf.sprintf
              "%s:\n%s"
@@ -182,7 +187,7 @@ let status workspace =
              (show p.repo p.show |> Show.sexp_of_t |> sexp_repr_long))
       workspace
   in
-  String.concat "\n\n" ([ Workspace.sexp_of_t workspace |> sexp_repr_long ] @ projections)
+  String.concat "\n\n" items_repr
 ;;
 
 (* read/write/main machinery *)
@@ -210,8 +215,10 @@ let expand_repo workspace_file (Workspace.{ repo; _ } as projection) =
 (** Resolve repository paths assumed relative to [workspace_file] *)
 let expand_repos workspace_file workspace =
   List.map
-    (function
-      | Workspace.Projection p -> Workspace.Projection (expand_repo workspace_file p))
+    Workspace.(
+      function
+      | Debug -> Debug
+      | Projection p -> Workspace.Projection (expand_repo workspace_file p))
     workspace
 ;;
 
