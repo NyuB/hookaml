@@ -1,16 +1,9 @@
 # Aliases
-  $ show_workspace() { gitst workspace.sexp workspace.out; cat workspace.out; }
+  $ show_workspace() { gitst "$1" workspace.out; cat workspace.out; }
 # Setup
   $ echo "workspace.*" > .gitignore
   $ git init
   Initialized empty Git repository in $TESTCASE_ROOT/.git/
-  $ cat workspace.sexp
-  (
-      (projection ((describe "Changed '.md' files in worktree") (repo .)
-          (show (filter (ends_with .md) worktree))))
-      (projection ((describe "Changed files in worktree starting with RE") (repo .)
-          (show (filter (starts_with RE) worktree))))
-  )
   $ touch workspace.out
 # Modify worktree
   $ touch README.md
@@ -20,12 +13,12 @@
   CONTRIBUTE.md
   README.md
   RELEASE_NOTES.txt
+  ends_with.sexp
+  starts_with.sexp
   workspace.out
-  workspace.sexp
-  $ show_workspace
-  Changed '.md' files in worktree:
-  ((Untracked CONTRIBUTE.md) (Untracked README.md))
-  
+  $ show_workspace starts_with.sexp
   Changed files in worktree starting with RE:
   ((Untracked README.md) (Untracked RELEASE_NOTES.txt))
-
+  $ show_workspace ends_with.sexp
+  Changed '.md' files in worktree:
+  ((Untracked CONTRIBUTE.md) (Untracked README.md))

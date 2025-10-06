@@ -43,9 +43,15 @@ module Workspace = struct
       raise @@ Sexplib.Conv_error.stag_incorrect_n_args "commit_ref" "merge_base" sexp
   ;;
 
+  type select =
+    | File
+    | Status
+  [@@deriving sexp]
+
   type predicate =
     | Starts_with of string
     | Ends_with of string
+    | On of (select * predicate)
   [@@deriving sexp]
 
   type show =
@@ -53,6 +59,7 @@ module Workspace = struct
     | Diff_files of commit_ref * commit_ref
     | Union of show * show
     | Filter of predicate * show
+    | Select of select * show
   [@@deriving sexp]
 
   type projection =
@@ -138,18 +145,35 @@ module Show = struct
     type t =
       | Status_file of Status.Item.t
       | File of string
+      | String of string
+      | Error of string
 
     let sexp_of_t = function
       | Status_file f -> Status.Item.sexp_of_t f
       | File f -> Sexplib.Sexp.Atom f
+      | String s -> Sexplib.Sexp.Atom s
+      | Error s -> Sexplib.Sexp.(List [ Atom "Error"; Atom s ])
     ;;
 
     let compare a b =
       match a, b with
       | Status_file a, Status_file b -> Status.Item.compare a b
       | File a, File b -> String.compare a b
+      | String a, String b -> String.compare a b
+      | Error a, Error b -> String.compare a b
       | Status_file _, _ -> 1
       | _, Status_file _ -> -1
+      | File _, _ -> 1
+      | _, File _ -> -1
+      | String _, _ -> 1
+      | _, String _ -> -1
+    ;;
+
+    let string_content = function
+      | Status_file _ -> None
+      | File f -> Some f
+      | String s -> Some s
+      | Error _ -> None
     ;;
   end
 
@@ -163,15 +187,29 @@ end
 
 (* Actual execution *)
 
-let apply_predicate (p : Workspace.predicate) (s : Show.Item.t) : bool =
-  let as_string =
-    match s with
-    | File f -> f
-    | Status_file f -> Status.Item.file f
-  in
+let apply_select (select : Workspace.select) (s : Show.Item.t) =
+  match select, s with
+  | File, File f -> Show.Item.File f
+  | File, Status_file f -> Show.Item.File (Status.Item.file f)
+  | Status, Status_file (Modified _) -> String "Modified"
+  | Status, Status_file (Removed _) -> String "Removed"
+  | Status, Status_file (Added _) -> String "Added"
+  | Status, Status_file (Untracked _) -> String "Untracked"
+  | File, _ -> Error "Cannot select a file"
+  | Status, _ -> Error "Cannot select a status"
+;;
+
+let rec apply_predicate (p : Workspace.predicate) (s : Show.Item.t) : bool =
   match p with
-  | Starts_with prefix -> String.starts_with ~prefix as_string
-  | Ends_with suffix -> String.ends_with ~suffix as_string
+  | Starts_with prefix ->
+    (match Show.Item.string_content s with
+     | None -> false
+     | Some s -> String.starts_with ~prefix s)
+  | Ends_with suffix ->
+    (match Show.Item.string_content s with
+     | None -> false
+     | Some s -> String.ends_with ~suffix s)
+  | On (selector, predicate) -> apply_predicate predicate (apply_select selector s)
 ;;
 
 let filter_show (p : Workspace.predicate) (s : Show.t) =
@@ -197,6 +235,13 @@ let rec show repo (s : Workspace.show) : Show.t =
          l)
   | Union (a, b) -> Show.union (show repo a) (show repo b)
   | Filter (p, s) -> filter_show p (show repo s)
+  | Select (selector, from) ->
+    Show.ItemSet.filter_map
+      (fun s ->
+         match apply_select selector s with
+         | Error _ -> None
+         | s -> Some s)
+      (show repo from)
 ;;
 
 let status workspace =
