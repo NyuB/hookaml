@@ -57,6 +57,7 @@ module Workspace = struct
   type show =
     | Worktree
     | Diff_files of commit_ref * commit_ref
+    | Commit_range of commit_ref * commit_ref
     | Union of show * show
     | Filter of predicate * show
     | Select of select * show
@@ -179,10 +180,13 @@ module Show = struct
 
   module ItemSet = Set.Make (Item)
 
-  type t = ItemSet.t
+  type t = Item.t list
 
-  let sexp_of_t t = sexp_of_list Item.sexp_of_t (ItemSet.to_list t)
-  let union (a : t) (b : t) : t = ItemSet.union a b
+  let sexp_of_t t = sexp_of_list Item.sexp_of_t t
+
+  let union (a : t) (b : t) : t =
+    ItemSet.union (ItemSet.of_list a) (ItemSet.of_list b) |> ItemSet.to_list
+  ;;
 end
 
 (* Actual execution *)
@@ -212,8 +216,13 @@ let rec apply_predicate (p : Workspace.predicate) (s : Show.Item.t) : bool =
   | On (selector, predicate) -> apply_predicate predicate (apply_select selector s)
 ;;
 
-let filter_show (p : Workspace.predicate) (s : Show.t) =
-  Show.ItemSet.filter (apply_predicate p) s
+let filter_show (p : Workspace.predicate) (s : Show.t) = List.filter (apply_predicate p) s
+
+let get_commit_range repo a b =
+  Git.exec
+    repo
+    [| "log"; "--oneline"; "--format=%h '%an' '%s'"; Printf.sprintf "%s..%s" a b |]
+  |> String.split_on_char '\n'
 ;;
 
 let rec show repo (s : Workspace.show) : Show.t =
@@ -222,21 +231,23 @@ let rec show repo (s : Workspace.show) : Show.t =
     Status.of_git repo
     |> Status.ItemSet.to_seq
     |> Seq.map (fun s -> Show.Item.Status_file s)
-    |> Show.ItemSet.of_seq
+    |> List.of_seq
   | Diff_files (a, b) ->
     Git.exec repo [| "diff"; "--name-only"; get_ref repo a; get_ref repo b |]
     |> String.split_on_char '\n'
     |> fun l ->
-    Show.ItemSet.of_list
-      (List.filter_map
-         (function
-           | "" -> None
-           | s -> Some (Show.Item.File s))
-         l)
+    List.filter_map
+      (function
+        | "" -> None
+        | s -> Some (Show.Item.File s))
+      l
+  | Commit_range (a, b) ->
+    get_commit_range repo (get_ref repo a) (get_ref repo b)
+    |> List.map (fun s -> Show.Item.String s)
   | Union (a, b) -> Show.union (show repo a) (show repo b)
   | Filter (p, s) -> filter_show p (show repo s)
   | Select (selector, from) ->
-    Show.ItemSet.filter_map
+    List.filter_map
       (fun s ->
          match apply_select selector s with
          | Error _ -> None
