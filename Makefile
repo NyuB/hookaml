@@ -6,11 +6,11 @@ INSTALL_ROOT=~/bin
 default: fmt test
 
 # Build the executable then copy it under INSTALL_ROOT
-install: fmt build test
+install-%: fmt build test
 	# Copy the executable into installation directory
-	cp _build/install/default/bin/hookaml $(INSTALL_ROOT)/hookaml
+	cp _build/install/default/bin/$* $(INSTALL_ROOT)/$*
 	# Make the installed file writable to allow future deletion or replacement
-	chmod +w $(INSTALL_ROOT)/hookaml
+	chmod +w $(INSTALL_ROOT)/$*
 
 build:
 	dune build

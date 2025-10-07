@@ -1,10 +1,4 @@
 (executable
- (public_name hookaml)
- (name hookaml)
- (modules hookaml)
- (libraries sexplib))
-
-(executable
  (public_name gitst)
  (name gitst)
  (modules gitst)
