@@ -43,10 +43,13 @@ module Workspace = struct
       raise @@ Sexplib.Conv_error.stag_incorrect_n_args "commit_ref" "merge_base" sexp
   ;;
 
-  type select = Get of string
+  type select =
+    | Get of string
+    | S of string
 
   let sexp_of_select = function
     | Get s -> Sexplib.Sexp.Atom s
+    | S s -> Sexplib.Sexp.List [ Sexplib.Sexp.Atom "s"; Sexplib.Sexp.Atom s ]
   ;;
 
   let select_of_sexp = function
@@ -55,6 +58,8 @@ module Workspace = struct
     | Sexplib.Sexp.List [ Sexplib.Sexp.Atom get; Sexplib.Sexp.Atom s ]
       when String.equal "get" (String.lowercase_ascii get)
            && String.starts_with ~prefix:":" s -> Get s
+    | Sexplib.Sexp.List [ Sexplib.Sexp.Atom s; Sexplib.Sexp.Atom str ]
+      when String.equal "s" (String.lowercase_ascii s) -> S str
     | _ -> raise @@ Sexplib.Conv_error.no_variant_match ()
   ;;
 
@@ -71,6 +76,7 @@ module Workspace = struct
     | Union of show * show
     | Filter of predicate * show
     | Select of select * show
+    | Format of (select list * show)
   [@@deriving sexp]
 
   type projection =
@@ -174,6 +180,15 @@ module Show = struct
         Sexplib.Sexp.(List (List.map (fun (k, v) -> List [ Atom k; recurse v ]) r))
     ;;
 
+    let rec string_of_t = function
+      | String s -> s
+      | Error s -> Printf.sprintf "Error: %s" s
+      | Record r ->
+        r
+        |> List.map (fun (k, v) -> Printf.sprintf "(%s %s)" k (string_of_t v))
+        |> String.concat " "
+    ;;
+
     let compare_record_item compare (ka, a) (kb, b) =
       let key_compare = String.compare ka kb in
       if key_compare != 0 then compare a b else key_compare
@@ -218,6 +233,7 @@ let apply_select (select : Workspace.select) (s : Show.Item.t) =
     |> Option.value
          ~default:(Show.Item.Error (Printf.sprintf "Cannot select field %s" field))
   | Get f, _ -> Error (Printf.sprintf "Cannot get field %s" f)
+  | S s, _ -> String s
 ;;
 
 let rec apply_predicate (p : Workspace.predicate) (s : Show.Item.t) : bool =
@@ -266,6 +282,15 @@ let get_commit_range repo a b =
     | _ -> failwith "unreachable")
 ;;
 
+let apply_format selectors s =
+  List.to_seq selectors
+  |> Seq.map (fun select -> apply_select select s)
+  |> Seq.map Show.Item.string_of_t
+  |> List.of_seq
+  |> String.concat " "
+  |> fun s -> Show.Item.String s
+;;
+
 let rec show repo (s : Workspace.show) : Show.t =
   match s with
   | Worktree ->
@@ -296,6 +321,13 @@ let rec show repo (s : Workspace.show) : Show.t =
          | Error _ -> None
          | s -> Some s)
       (show repo from)
+  | Format (selectors, s) ->
+    show repo s
+    |> List.to_seq
+    |> Seq.map (apply_format selectors)
+    |> Seq.map Show.Item.string_of_t
+    |> Seq.map (fun s -> Show.Item.String s)
+    |> List.of_seq
 ;;
 
 let status workspace =
