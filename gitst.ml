@@ -77,7 +77,7 @@ module Workspace = struct
     | Union of show * show
     | Filter of predicate * show
     | Select of select * show
-    | Format of (select list * show)
+    | Format of select list * show
   [@@deriving sexp]
 
   type projection =
