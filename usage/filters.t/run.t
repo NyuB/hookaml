@@ -4,6 +4,7 @@
   $ echo "workspace.*" > .gitignore
   $ git init
   Initialized empty Git repository in $TESTCASE_ROOT/.git/
+  $ git config user.name "Brice Decaestecker"
   $ touch workspace.out
 # Modify worktree
   $ touch README.md
@@ -13,6 +14,7 @@
   CONTRIBUTE.md
   README.md
   RELEASE_NOTES.txt
+  contains.sexp
   ends_with.sexp
   starts_with.sexp
   workspace.out
@@ -24,3 +26,10 @@
   Changed '.md' files in worktree:
   (((:status Untracked) (:file CONTRIBUTE.md))
    ((:status Untracked) (:file README.md)))
+  $ git commit --allow-empty -m "Root commit" > /dev/null
+  $ git commit --allow-empty -m "Awesome commit" > /dev/null
+  $ git commit --allow-empty -m "Superbissima feature" > /dev/null
+  $ git commit --allow-empty -m "fixup this above" > /dev/null
+  $ show_workspace contains.sexp
+  Last 3 commits:
+  ("Brice Decaestecker | fixup this above")

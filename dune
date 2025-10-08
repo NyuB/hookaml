@@ -2,6 +2,14 @@
  (public_name gitst)
  (name gitst)
  (modules gitst)
- (libraries sexplib unix)
+ (libraries sexplib substring unix)
  (preprocess
   (pps ppx_sexp_conv)))
+
+(library
+ (name substring)
+ (modules substring)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect))
+ (libraries))

@@ -66,6 +66,7 @@ module Workspace = struct
   type predicate =
     | Starts_with of string
     | Ends_with of string
+    | Contains of string
     | On of (select * predicate)
   [@@deriving sexp]
 
@@ -246,6 +247,10 @@ let rec apply_predicate (p : Workspace.predicate) (s : Show.Item.t) : bool =
     (match Show.Item.string_content s with
      | None -> false
      | Some s -> String.ends_with ~suffix s)
+  | Contains needle ->
+    (match Show.Item.string_content s with
+     | None -> false
+     | Some s -> Substring.contains ~needle s)
   | On (selector, predicate) -> apply_predicate predicate (apply_select selector s)
 ;;
 
