@@ -18,7 +18,9 @@
   workspace.out
   $ show_workspace starts_with.sexp
   Changed files in worktree starting with RE:
-  ((Untracked README.md) (Untracked RELEASE_NOTES.txt))
+  (((:status Untracked) (:file README.md))
+   ((:status Untracked) (:file RELEASE_NOTES.txt)))
   $ show_workspace ends_with.sexp
   Changed '.md' files in worktree:
-  ((Untracked CONTRIBUTE.md) (Untracked README.md))
+  (((:status Untracked) (:file CONTRIBUTE.md))
+   ((:status Untracked) (:file README.md)))

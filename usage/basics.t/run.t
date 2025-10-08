@@ -9,7 +9,7 @@
   $ cat workspace.sexp
   (
       (projection ((describe "Worktree") (repo .) (show worktree)))
-      (projection ((describe "Changed files relative to reference") (repo .) (show (union worktree (diff_files (merge_base HEAD main) HEAD)))))
+      (projection ((describe "Changed files relative to reference") (repo .) (show (union worktree (select (get :file) (diff_files (merge_base HEAD main) HEAD))))))
   )
   $ add_and_commit "Root commit" .gitignore
 # No difference
@@ -23,10 +23,10 @@
   $ touch a.txt
   $ show_workspace workspace.sexp
   Worktree:
-  ((Untracked a.txt))
+  (((:status Untracked) (:file a.txt)))
   
   Changed files relative to reference:
-  ((Untracked a.txt))
+  (((:status Untracked) (:file a.txt)))
   $ git checkout -b my_branch
   Switched to a new branch 'my_branch'
 # Commit changes

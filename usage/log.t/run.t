@@ -14,12 +14,14 @@
   $ git checkout -b my_branch
   Switched to a new branch 'my_branch'
   $ git commit --allow-empty -m "#3 Commit on my branch" > /dev/null
-  $ alias escape_hashes="sed -E 's/\"[0-9a-f]+/\"hhhh/'" # Escape hashes for test stability
+  $ alias escape_hashes="sed -E 's/:hash [0-9a-f]+/:hash hhhh/'" # Escape hashes for test stability
   $ show_workspace last_commits.sexp | escape_hashes
   Last 3 commits:
-  ("hhhh 'Brice Decaestecker' '#3 Commit on my branch'"
-   "hhhh 'Brice Decaestecker' '#2 Commit'"
-   "hhhh 'Brice Decaestecker' '#1 Commit'")
+  (((:hash hhhh) (:author "Brice Decaestecker")
+    (:message "#3 Commit on my branch"))
+   ((:hash hhhh) (:author "Brice Decaestecker") (:message "#2 Commit"))
+   ((:hash hhhh) (:author "Brice Decaestecker") (:message "#1 Commit")))
   
   Commits since reference:
-  ("hhhh 'Brice Decaestecker' '#3 Commit on my branch'")
+  (((:hash hhhh) (:author "Brice Decaestecker")
+    (:message "#3 Commit on my branch")))

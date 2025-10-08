@@ -46,6 +46,7 @@ module Workspace = struct
   type select =
     | File
     | Status
+    | Get of string
   [@@deriving sexp]
 
   type predicate =
@@ -86,6 +87,13 @@ module Status = struct
       | Untracked of string
       | Removed of string
     [@@deriving sexp]
+
+    let status = function
+      | Added _ -> "Added"
+      | Modified _ -> "Modified"
+      | Untracked _ -> "Untracked"
+      | Removed _ -> "Removed"
+    ;;
 
     let file = function
       | Added f | Modified f | Untracked f | Removed f -> f
@@ -144,36 +152,38 @@ let rec get_ref repo (r : Workspace.commit_ref) =
 module Show = struct
   module Item = struct
     type t =
-      | Status_file of Status.Item.t
-      | File of string
       | String of string
+      | Record of (string * t) list
       | Error of string
 
-    let sexp_of_t = function
-      | Status_file f -> Status.Item.sexp_of_t f
-      | File f -> Sexplib.Sexp.Atom f
+    let rec sexp_of_t =
+      let recurse = sexp_of_t in
+      function
       | String s -> Sexplib.Sexp.Atom s
       | Error s -> Sexplib.Sexp.(List [ Atom "Error"; Atom s ])
+      | Record r ->
+        Sexplib.Sexp.(List (List.map (fun (k, v) -> List [ Atom k; recurse v ]) r))
     ;;
 
-    let compare a b =
+    let compare_record_item compare (ka, a) (kb, b) =
+      let key_compare = String.compare ka kb in
+      if key_compare != 0 then compare a b else key_compare
+    ;;
+
+    let rec compare a b =
       match a, b with
-      | Status_file a, Status_file b -> Status.Item.compare a b
-      | File a, File b -> String.compare a b
       | String a, String b -> String.compare a b
       | Error a, Error b -> String.compare a b
-      | Status_file _, _ -> 1
-      | _, Status_file _ -> -1
-      | File _, _ -> 1
-      | _, File _ -> -1
+      | Record a, Record b -> List.compare (compare_record_item compare) a b
+      | _, Record _ -> -1
+      | Record _, _ -> 1
       | String _, _ -> 1
       | _, String _ -> -1
     ;;
 
     let string_content = function
-      | Status_file _ -> None
-      | File f -> Some f
       | String s -> Some s
+      | Record _ -> None
       | Error _ -> None
     ;;
   end
@@ -191,15 +201,15 @@ end
 
 (* Actual execution *)
 
-let apply_select (select : Workspace.select) (s : Show.Item.t) =
+let rec apply_select (select : Workspace.select) (s : Show.Item.t) =
   match select, s with
-  | File, File f -> Show.Item.File f
-  | File, Status_file f -> Show.Item.File (Status.Item.file f)
-  | Status, Status_file (Modified _) -> String "Modified"
-  | Status, Status_file (Removed _) -> String "Removed"
-  | Status, Status_file (Added _) -> String "Added"
-  | Status, Status_file (Untracked _) -> String "Untracked"
-  | File, _ -> Error "Cannot select a file"
+  | File, s -> apply_select (Get ":file") s
+  | Get field, Record r ->
+    List.find_opt (fun (k, _) -> String.equal k field) r
+    |> Option.map snd
+    |> Option.value
+         ~default:(Show.Item.Error (Printf.sprintf "Cannot select field %s" field))
+  | Get f, _ -> Error (Printf.sprintf "Cannot get field %s" f)
   | Status, _ -> Error "Cannot select a status"
 ;;
 
@@ -218,11 +228,35 @@ let rec apply_predicate (p : Workspace.predicate) (s : Show.Item.t) : bool =
 
 let filter_show (p : Workspace.predicate) (s : Show.t) = List.filter (apply_predicate p) s
 
+let sub_delimited s ~delimiter =
+  let l = String.length s in
+  let d = String.length delimiter in
+  let rec aux acc i j =
+    if j = l
+    then List.rev acc
+    else if j + d >= l
+    then aux (String.sub s i (l - i) :: acc) l l
+    else if String.equal delimiter (String.sub s j d)
+    then aux (String.sub s i (j - i) :: acc) (j + d) (j + d)
+    else aux acc i (j + 1)
+  in
+  aux [] 0 0
+;;
+
 let get_commit_range repo a b =
   Git.exec
     repo
-    [| "log"; "--oneline"; "--format=%h '%an' '%s'"; Printf.sprintf "%s..%s" a b |]
+    [| "log"; "--oneline"; "--format=%h@@@%an@@@%s"; Printf.sprintf "%s..%s" a b |]
   |> String.split_on_char '\n'
+  |> List.map (sub_delimited ~delimiter:"@@@")
+  |> List.map (function
+    | [ h; author; message ] ->
+      Show.Item.Record
+        [ ":hash", Show.Item.String h
+        ; ":author", Show.Item.String author
+        ; ":message", Show.Item.String message
+        ]
+    | _ -> failwith "unreachable")
 ;;
 
 let rec show repo (s : Workspace.show) : Show.t =
@@ -230,7 +264,11 @@ let rec show repo (s : Workspace.show) : Show.t =
   | Worktree ->
     Status.of_git repo
     |> Status.ItemSet.to_seq
-    |> Seq.map (fun s -> Show.Item.Status_file s)
+    |> Seq.map (fun s ->
+      Show.Item.Record
+        [ ":status", Show.Item.String (Status.Item.status s)
+        ; ":file", Show.Item.String (Status.Item.file s)
+        ])
     |> List.of_seq
   | Diff_files (a, b) ->
     Git.exec repo [| "diff"; "--name-only"; get_ref repo a; get_ref repo b |]
@@ -239,11 +277,9 @@ let rec show repo (s : Workspace.show) : Show.t =
     List.filter_map
       (function
         | "" -> None
-        | s -> Some (Show.Item.File s))
+        | s -> Some Show.Item.(Record [ ":file", String s ]))
       l
-  | Commit_range (a, b) ->
-    get_commit_range repo (get_ref repo a) (get_ref repo b)
-    |> List.map (fun s -> Show.Item.String s)
+  | Commit_range (a, b) -> get_commit_range repo (get_ref repo a) (get_ref repo b)
   | Union (a, b) -> Show.union (show repo a) (show repo b)
   | Filter (p, s) -> filter_show p (show repo s)
   | Select (selector, from) ->
