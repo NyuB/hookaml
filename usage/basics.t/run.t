@@ -9,7 +9,7 @@
   $ cat workspace.sexp
   (
       (projection ((describe "Worktree") (repo .) (show worktree)))
-      (projection ((describe "Changed files relative to reference") (repo .) (show (union worktree (select (get :file) (diff_files (merge_base HEAD main) HEAD))))))
+      (projection ((describe "Changed files relative to reference") (repo .) (show (union worktree (select :file (diff_files (merge_base HEAD main) HEAD))))))
   )
   $ add_and_commit "Root commit" .gitignore
 # No difference

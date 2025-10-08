@@ -43,11 +43,20 @@ module Workspace = struct
       raise @@ Sexplib.Conv_error.stag_incorrect_n_args "commit_ref" "merge_base" sexp
   ;;
 
-  type select =
-    | File
-    | Status
-    | Get of string
-  [@@deriving sexp]
+  type select = Get of string
+
+  let sexp_of_select = function
+    | Get s -> Sexplib.Sexp.Atom s
+  ;;
+
+  let select_of_sexp = function
+    | Sexplib.Sexp.Atom s when String.starts_with ~prefix:":" s -> Get s
+    | Sexplib.Sexp.Atom _ -> raise @@ Sexplib.Conv_error.no_variant_match ()
+    | Sexplib.Sexp.List [ Sexplib.Sexp.Atom get; Sexplib.Sexp.Atom s ]
+      when String.equal "get" (String.lowercase_ascii get)
+           && String.starts_with ~prefix:":" s -> Get s
+    | _ -> raise @@ Sexplib.Conv_error.no_variant_match ()
+  ;;
 
   type predicate =
     | Starts_with of string
@@ -201,16 +210,14 @@ end
 
 (* Actual execution *)
 
-let rec apply_select (select : Workspace.select) (s : Show.Item.t) =
+let apply_select (select : Workspace.select) (s : Show.Item.t) =
   match select, s with
-  | File, s -> apply_select (Get ":file") s
   | Get field, Record r ->
     List.find_opt (fun (k, _) -> String.equal k field) r
     |> Option.map snd
     |> Option.value
          ~default:(Show.Item.Error (Printf.sprintf "Cannot select field %s" field))
   | Get f, _ -> Error (Printf.sprintf "Cannot get field %s" f)
-  | Status, _ -> Error "Cannot select a status"
 ;;
 
 let rec apply_predicate (p : Workspace.predicate) (s : Show.Item.t) : bool =
