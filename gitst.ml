@@ -134,6 +134,7 @@ module Status = struct
     let modified s = Modified s
     let untracked s = Untracked s
     let added s = Added s
+    let removed s = Removed s
   end
 
   module ItemSet = Set.Make (Item)
@@ -146,7 +147,9 @@ module Status = struct
     else if starts_with "?? "
     then scanf "?? %s" Item.untracked
     else if starts_with "A "
-    then scanf "A %s" Item.added
+    then scanf " A %s" Item.added
+    else if starts_with " D"
+    then scanf " D %s" Item.removed
     else None
   ;;
 
