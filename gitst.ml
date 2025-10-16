@@ -90,7 +90,20 @@ module Workspace = struct
   type item =
     | Projection of projection
     | Debug
-  [@@deriving sexp]
+
+  let sexp_of_item = function
+    | Debug -> Sexplib.Sexp.Atom "debug"
+    | Projection projection ->
+      Sexplib.Sexp.(List [ Atom "projection"; sexp_of_projection projection ])
+  ;;
+
+  let item_of_sexp = function
+    | Sexplib.Sexp.Atom "Debug" -> Debug
+    | Sexplib.Sexp.(List [ Atom "projection"; projection ])
+    | Sexplib.Sexp.(List [ Atom "Projection"; projection ]) ->
+      Projection (projection_of_sexp projection)
+    | s -> raise @@ Sexplib.Conv_error.no_matching_variant_found "item_of_sexp" s
+  ;;
 
   type t = item list [@@deriving sexp]
 end
