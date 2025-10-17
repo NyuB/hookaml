@@ -2,7 +2,7 @@
  (public_name gitst)
  (name gitst)
  (modules gitst)
- (libraries sexplib substring unix)
+ (libraries substring unix)
  (preprocess
   (pps ppx_sexp_conv)))
 
