@@ -17,7 +17,7 @@
  (libraries sexp_light)
  (inline_tests)
  (preprocess
-  (pps ppx_sexp_conv ppx_expect)))
+  (pps ppx_sexp_light ppx_sexp_conv ppx_expect)))
 
 (library
  (name substring)
@@ -26,3 +26,10 @@
  (preprocess
   (pps ppx_expect))
  (libraries))
+
+(library
+ (name ppx_sexp_light)
+ (modules ppx_sexp_light)
+ (kind ppx_deriver)
+ (libraries ppxlib)
+ (preprocess no_preprocessing))

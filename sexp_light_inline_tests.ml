@@ -170,3 +170,9 @@ let%expect_test "Parse record (errors)" =
     Extra field: Invalid_argument("sexp_light_inline_tests.ml.record: Unexpected field field_oops")
     |}]
 ;;
+
+type record_light =
+  { i : int
+  ; s : string
+  }
+[@@deriving sexp_light]
