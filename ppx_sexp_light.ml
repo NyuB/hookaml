@@ -113,32 +113,34 @@ let generate_sexp_of_field ~loc record_exp field_declaration =
     ]
 ;;
 
+let generate_sexp_of_function ~loc td argument_name =
+  match td.ptype_kind with
+  | Ptype_record fields ->
+    sexp_list ~loc (List.map (generate_sexp_of_field ~loc argument_name) fields)
+  | _ -> failwith "Unsupported type kind"
+;;
+
 let generate_sexp_of (td : type_declaration) : structure_item list =
   let sexp_of_t = Printf.sprintf "sexp_of_%s" td.ptype_name.txt in
-  match td.ptype_kind with
-  | Ptype_record _fields ->
-    let loc = td.ptype_loc in
-    [ pstr_value
-        ~loc
-        Nonrecursive
-        [ { pvb_pat = ppat_var ~loc { loc; txt = sexp_of_t }
-          ; pvb_loc = loc
-          ; pvb_attributes = []
-          ; pvb_constraint = None
-          ; pvb_expr =
-              (let record_argument_name = td.ptype_name.txt in
-               pexp_fun
-                 ~loc
-                 Nolabel
-                 None
-                 (ppat_var ~loc { loc; txt = record_argument_name })
-                 (sexp_list
-                    ~loc
-                    (List.map (generate_sexp_of_field ~loc record_argument_name) _fields)))
-          }
-        ]
-    ]
-  | _ -> failwith "Unsupported type kind"
+  let loc = td.ptype_loc in
+  [ pstr_value
+      ~loc
+      Nonrecursive
+      [ { pvb_pat = ppat_var ~loc { loc; txt = sexp_of_t }
+        ; pvb_loc = loc
+        ; pvb_attributes = []
+        ; pvb_constraint = None
+        ; pvb_expr =
+            (let record_argument_name = td.ptype_name.txt in
+             pexp_fun
+               ~loc
+               Nolabel
+               None
+               (ppat_var ~loc { loc; txt = record_argument_name })
+               (generate_sexp_of_function ~loc td record_argument_name))
+        }
+      ]
+  ]
 ;;
 
 let generate_impl ~ctxt (_rec_flag, (type_declarations : type_declaration list)) =
