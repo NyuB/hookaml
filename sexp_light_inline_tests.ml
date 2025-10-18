@@ -173,6 +173,7 @@ let%expect_test "Parse record (errors)" =
 type record_light =
   { i : int
   ; s : string
+  ; opt_str : string option
   }
 [@@deriving sexp_light]
 
@@ -180,6 +181,9 @@ let%expect_test "Record printing (light) (success)" =
   let print_serialized ~sexp_of ~label record =
     print_endline (Printf.sprintf "%s: %s" label (Sexp.to_string_hum (sexp_of record)))
   in
-  print_serialized ~sexp_of:sexp_of_record_light ~label:"Happy path" { i = 1; s = "one" };
-  [%expect {| Happy path: ((i 1) (s one)) |}]
+  print_serialized
+    ~sexp_of:sexp_of_record_light
+    ~label:"Happy path"
+    { i = 1; s = "one"; opt_str = None };
+  [%expect {| Happy path: ((i 1) (s one) (opt_str none)) |}]
 ;;

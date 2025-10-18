@@ -408,8 +408,8 @@ module Std = struct
   ;;
 
   let sexp_of_option sexp_of_item = function
-    | None -> Atom "None"
-    | Some item -> List [ Atom "Some"; sexp_of_item item ]
+    | None -> Atom "none"
+    | Some item -> List [ Atom "some"; sexp_of_item item ]
   ;;
 
   let option_of_sexp item_of_sexp = function
