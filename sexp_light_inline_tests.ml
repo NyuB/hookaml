@@ -174,6 +174,7 @@ type record_light =
   { i : int
   ; s : string
   ; opt_str : string option
+  ; list_str : string list
   }
 [@@deriving sexp_light]
 
@@ -184,6 +185,6 @@ let%expect_test "Record printing (light) (success)" =
   print_serialized
     ~sexp_of:sexp_of_record_light
     ~label:"Happy path"
-    { i = 1; s = "one"; opt_str = None };
-  [%expect {| Happy path: ((i 1) (s one) (opt_str none)) |}]
+    { i = 1; s = "one"; opt_str = None; list_str = [ "a"; "b" ] };
+  [%expect {| Happy path: ((i 1) (s one) (opt_str none) (list_str (a b))) |}]
 ;;
