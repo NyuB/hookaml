@@ -1,5 +1,10 @@
 open Sexp_light
 
+(* ppx_sexp_conv compatibility *)
+module Sexplib0 = Sexp_light
+module Sexplib = Sexp_light
+open Sexp_light.Std
+
 let a s = Sexp.Atom s
 let l sl = Sexp.List sl
 
@@ -53,5 +58,115 @@ let%expect_test "Parse (errors)" =
     Dangling quote: Failure("Invalid atom character '\"' at character 3")
     Unexpected list: Failure("Unexpected character 'b' at position 2, expected end of input")
     Unexpected list: Failure("Unexpected character '(' at position 2, expected end of input")
+    |}]
+;;
+
+type record =
+  { field_str : string
+  ; field_int : int
+  ; field_float : float
+  ; field_char : char
+  ; field_opt_str : string option
+  ; field_list_str : string list
+  }
+[@@deriving sexp]
+
+let show_option show_item = function
+  | None -> "None"
+  | Some item -> Printf.sprintf "Some %s" (show_item item)
+;;
+
+let quote s = Printf.sprintf "\"%s\"" s
+
+let show_list show_item l =
+  Printf.sprintf "[%s]" (String.concat "; " (List.map show_item l))
+;;
+
+let show_record
+      { field_str : string
+      ; field_int
+      ; field_float
+      ; field_char
+      ; field_opt_str
+      ; field_list_str
+      }
+  =
+  Printf.sprintf
+    {|{ field_str = "%s"; field_int = %d; field_float = %f; field_char : %c; field_opt_str : %s; field_list_str : %s }|}
+    field_str
+    field_int
+    field_float
+    field_char
+    (show_option quote field_opt_str)
+    (show_list quote field_list_str)
+;;
+
+let print_parsed_record ~label record_str =
+  print_endline
+    (Printf.sprintf
+       "%s: %s"
+       label
+       (show_record (record_of_sexp (Sexp.of_string record_str))))
+;;
+
+let print_parser_record_error ~label record_str =
+  try
+    let record = record_of_sexp (Sexp.of_string record_str) in
+    print_endline
+      (Printf.sprintf
+         "/!\\ Unexpected parse success /!\\ %s: %s"
+         label
+         (show_record record))
+  with
+  | exn -> print_endline (Printf.sprintf "%s: %s" label (Printexc.to_string exn))
+;;
+
+let%expect_test "Record parsing (success)" =
+  print_parsed_record
+    ~label:"Happy path"
+    {|(
+      (field_str str) (field_int 1) (field_float 2) (field_char a)
+      (field_opt_str (some opt))
+      (field_list_str (stra strb strc))
+      )|};
+  print_parsed_record
+    ~label:"Out of order"
+    {|(
+      (field_int 1) (field_float 2)
+      (field_opt_str (some opt)) (field_str str)
+      (field_list_str (stra strb strc))
+      (field_char a)
+      )|};
+  [%expect
+    {|
+    Happy path: { field_str = "str"; field_int = 1; field_float = 2.000000; field_char : a; field_opt_str : Some "opt"; field_list_str : ["stra"; "strb"; "strc"] }
+    Out of order: { field_str = "str"; field_int = 1; field_float = 2.000000; field_char : a; field_opt_str : Some "opt"; field_list_str : ["stra"; "strb"; "strc"] }
+    |}]
+;;
+
+let%expect_test "Parse record (errors)" =
+  print_parser_record_error ~label:"Missing all fields" "()";
+  print_parser_record_error ~label:"Not a list" "atom";
+  print_parser_record_error
+    ~label:"Missing a field"
+    {|(
+      (field_str str) (field_int 1) (field_float 2) (field_char a)
+      (field_opt_str none)
+      
+      )|};
+  print_parser_record_error
+    ~label:"Extra field"
+    {|(
+      (field_str str) (field_int 1) (field_float 2) (field_char a)
+      (field_opt_str none)
+      (field_list_str ())
+      (field_oops oops)
+      )|};
+  [%expect
+    {|
+    Missing all fields: Invalid_argument("sexp_light_inline_tests.ml.record: Expected a list of (atom * sexp), received an empty list")
+    Not a list: Invalid_argument("sexp_light_inline_tests.ml.record: Expected a list of (atom * sexp), received a lonely atom")
+    Missing a field: Invalid_argument("sexp_light_inline_tests.ml.record: (Missing field field_list_str, ((field_str str) (field_int 1) (field_float 2) (field_char a) (field_opt_str none)))")
+    Extra field: Invalid_argument("sexp_light_inline_tests.ml.record: Unexpected field field_oops")
     |}]
 ;;

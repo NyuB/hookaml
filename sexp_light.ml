@@ -69,6 +69,11 @@ module Sexp = struct
     String.of_bytes (Buffer.to_bytes buff)
   ;;
 
+  let rec to_string_mach = function
+    | Atom a -> string_of_atom a
+    | List l -> Printf.sprintf "(%s)" (String.concat " " (List.map to_string_mach l))
+  ;;
+
   type parser =
     { mutable index : int
     ; s : string
@@ -276,21 +281,30 @@ module Sexp_conv_record = struct
         }
         -> ('a * 'b) fields
 
-  let rec conv_fields_of_sexps : type a. a fields -> Sexp.t list -> a =
+  let pair a b = a, b
+
+  (** @warning Expects a sexp list matching fields ordering *)
+  let rec conv_fields_of_sexps : type a. a fields -> Sexp.t list -> (a, string) result =
     fun fields sexp ->
     match fields, sexp with
-    | Empty, [] -> ()
+    | Empty, [] -> Ok ()
     | Field { conv; kind; rest; name; _ }, head :: tail ->
       (match kind with
        | Required ->
          let a =
-           try conv head with
+           try Ok (conv head) with
            | e ->
-             prerr_endline (Printf.sprintf "Error while trying to read field %s" name);
-             raise e
+             Error
+               (Printf.sprintf
+                  "Error while trying to read field %s: %s"
+                  name
+                  (Printexc.to_string e))
          in
-         a, conv_fields_of_sexps rest tail)
-    | _ -> failwith "unreachable"
+         (match a with
+          | Ok a -> Result.map (pair a) (conv_fields_of_sexps rest tail)
+          | Error err -> Error err))
+    | Field { name; _ }, [] -> Error (Printf.sprintf "Missing field %s" name)
+    | _ -> Error "Given sexp list does not match fields definition"
   ;;
 
   let record_of_sexp
@@ -331,12 +345,17 @@ module Sexp_conv_record = struct
         then true
         else if allow_extra_fields
         then false
-        else failwith (Printf.sprintf "%s: Unexpected field %s" caller name))
+        else
+          raise @@ Invalid_argument (Printf.sprintf "%s: Unexpected field %s" caller name))
       |> List.sort (fun (fa, _) (fb, _) ->
         Int.compare (index_of_field fa) (index_of_field fb))
       |> List.map snd
     in
-    conv_fields_of_sexps fields sorted_by_field |> create
+    match conv_fields_of_sexps fields sorted_by_field |> Result.map create with
+    | Ok v -> v
+    | Error err ->
+      raise
+      @@ Invalid_argument (Printf.sprintf "%s: (%s, %s)" caller err (to_string_mach l))
   ;;
 end
 
@@ -348,12 +367,58 @@ module Std = struct
     | List _ as l ->
       raise
       @@ Invalid_argument
-           (Printf.sprintf "Expected an atom got a list [%s]" (Sexp.to_string_hum l))
+           (Printf.sprintf "Expected an atom got a list [%s]" (Sexp.to_string_mach l))
+  ;;
+
+  let sexp_of_char c = Atom (String.make 1 c)
+
+  let char_of_sexp = function
+    | Atom c when String.length c = 1 -> String.get c 0
+    | Atom s ->
+      raise
+      @@ Invalid_argument (Printf.sprintf "Expected a single character atom, got '%s'" s)
+    | List _ as l ->
+      raise
+      @@ Invalid_argument
+           (Printf.sprintf "Expected an atom got a list [%s]" (Sexp.to_string_mach l))
+  ;;
+
+  let sexp_of_int i = Atom (string_of_int i)
+  let sexp_of_float f = Atom (string_of_float f)
+
+  let int_of_sexp = function
+    | Atom i -> int_of_string i
+    | List _ as l ->
+      raise
+      @@ Invalid_argument
+           (Printf.sprintf "Expected an atom got a list [%s]" (Sexp.to_string_mach l))
+  ;;
+
+  let float_of_sexp = function
+    | Atom f -> float_of_string f
+    | List _ as l ->
+      raise
+      @@ Invalid_argument
+           (Printf.sprintf "Expected an atom got a list [%s]" (Sexp.to_string_mach l))
   ;;
 
   let list_of_sexp item_of_sexp = function
     | Atom _ -> raise @@ Invalid_argument "Expected a list got an atom"
     | List l -> List.map item_of_sexp l
+  ;;
+
+  let sexp_of_option sexp_of_item = function
+    | None -> Atom "None"
+    | Some item -> List [ Atom "Some"; sexp_of_item item ]
+  ;;
+
+  let option_of_sexp item_of_sexp = function
+    | Atom ("None" | "none") -> None
+    | List [ Atom ("Some" | "some"); sexp ] -> Some (item_of_sexp sexp)
+    | s ->
+      raise
+      @@ Invalid_argument
+           (Printf.sprintf "Expected an option sexp, got %s" (to_string_mach s))
   ;;
 
   let sexp_of_list sexp_of_item l = List ((List.map sexp_of_item) l)

@@ -17,7 +17,7 @@
  (libraries sexp_light)
  (inline_tests)
  (preprocess
-  (pps ppx_expect)))
+  (pps ppx_sexp_conv ppx_expect)))
 
 (library
  (name substring)
