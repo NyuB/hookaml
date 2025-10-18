@@ -64,7 +64,15 @@ type pattern_and_expression =
   ; expression : expression
   }
 
-let sexp_of_tuple ~loc (types : core_type list) sex_of_type =
+(** [sexp_of_tuple ~loc sexp_of_desc types] is a function applicable to an expression [e] which is a tuple of [(types)] that would produce the conversion of [e] to a sexp 
+@param sexp_of_desc the recursive definition for the inner types of the tuple
+*)
+let sexp_of_tuple
+      ~loc
+      (sexp_of_desc : loc:location -> core_type_desc -> expression)
+      (types : core_type list)
+  : expression
+  =
   let args =
     List.mapi
       (fun i typ ->
@@ -73,7 +81,7 @@ let sexp_of_tuple ~loc (types : core_type list) sex_of_type =
          ; expression =
              pexp_apply
                ~loc
-               (sex_of_type ~loc typ.ptyp_desc)
+               (sexp_of_desc ~loc typ.ptyp_desc)
                [ Nolabel, pexp_ident ~loc { loc; txt = lident param_name } ]
          })
       types
@@ -90,7 +98,8 @@ let sexp_of_tuple ~loc (types : core_type list) sex_of_type =
     (Pfunction_body (sexp_list ~loc (List.map (fun arg -> arg.expression) args)))
 ;;
 
-let rec sexp_of_desc ~loc t =
+(** [sexp_of_desc ~loc t] is a function applicable to an expression [e] of type [t] that would produce the conversion of [e] to a sexp *)
+let rec sexp_of_desc ~loc (t : core_type_desc) : expression =
   let ident s = pexp_ident ~loc { loc; txt = lident s } in
   let dot_ident modul name = pexp_ident ~loc { loc; txt = Ldot (modul, name) } in
   match t with
@@ -118,7 +127,7 @@ let rec sexp_of_desc ~loc t =
   | Ptyp_any -> ident "sexp_of_any"
   | Ptyp_var _ -> ident "sexp_of_var"
   | Ptyp_arrow (_, _, _) -> ident "sexp_of_arrow"
-  | Ptyp_tuple types -> sexp_of_tuple ~loc types sexp_of_desc
+  | Ptyp_tuple types -> sexp_of_tuple ~loc sexp_of_desc types
   | Ptyp_object (_, _) -> ident "sexp_of_object"
   | Ptyp_class (_, _) -> ident "sexp_of_class"
   | Ptyp_alias (_, _) -> ident "sexp_of_alias"
