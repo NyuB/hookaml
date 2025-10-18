@@ -59,6 +59,37 @@ let is_type typename (type_desc : longident_loc) =
   | _ -> false
 ;;
 
+type pattern_and_expression =
+  { pattern : pattern
+  ; expression : expression
+  }
+
+let sexp_of_tuple ~loc (types : core_type list) sex_of_type =
+  let args =
+    List.mapi
+      (fun i typ ->
+         let param_name = Printf.sprintf "arg_%d" i in
+         { pattern = ppat_var ~loc { loc; txt = param_name }
+         ; expression =
+             pexp_apply
+               ~loc
+               (sex_of_type ~loc typ.ptyp_desc)
+               [ Nolabel, pexp_ident ~loc { loc; txt = lident param_name } ]
+         })
+      types
+  in
+  pexp_function
+    ~loc
+    [ { pparam_loc = loc
+      ; pparam_desc =
+          Pparam_val
+            (Nolabel, None, ppat_tuple ~loc (List.map (fun arg -> arg.pattern) args))
+      }
+    ]
+    None
+    (Pfunction_body (sexp_list ~loc (List.map (fun arg -> arg.expression) args)))
+;;
+
 let rec sexp_of_desc ~loc t =
   let ident s = pexp_ident ~loc { loc; txt = lident s } in
   let dot_ident modul name = pexp_ident ~loc { loc; txt = Ldot (modul, name) } in
@@ -87,7 +118,7 @@ let rec sexp_of_desc ~loc t =
   | Ptyp_any -> ident "sexp_of_any"
   | Ptyp_var _ -> ident "sexp_of_var"
   | Ptyp_arrow (_, _, _) -> ident "sexp_of_arrow"
-  | Ptyp_tuple _ -> ident "sexp_of_tuple"
+  | Ptyp_tuple types -> sexp_of_tuple ~loc types sexp_of_desc
   | Ptyp_object (_, _) -> ident "sexp_of_object"
   | Ptyp_class (_, _) -> ident "sexp_of_class"
   | Ptyp_alias (_, _) -> ident "sexp_of_alias"
@@ -113,11 +144,6 @@ let generate_sexp_of_field ~loc record_exp field_declaration =
         [ Nolabel, access_field ~loc field_declaration.pld_name.txt record_exp ]
     ]
 ;;
-
-type pattern_and_expression =
-  { pattern : pattern
-  ; expression : expression
-  }
 
 let uncapitalize_ascii s =
   let l = String.length s in
@@ -183,7 +209,15 @@ let sexp_of_body ~loc (td : type_declaration) (argument_name : string) : express
       ~loc
       (pexp_ident ~loc { loc; txt = lident argument_name })
       (List.map (sexp_of_case_of_constructor ~loc) constructors)
-  | _ -> failwith "Unsupported type kind, only records and variants are supported"
+  | Ptype_abstract ->
+    (match td.ptype_manifest with
+     | None -> pexp_ident ~loc { loc; txt = lident "sexp_of_abstract" }
+     | Some t ->
+       pexp_apply
+         ~loc
+         (sexp_of_desc ~loc t.ptyp_desc)
+         [ Nolabel, pexp_ident ~loc { loc; txt = lident argument_name } ])
+  | Ptype_open -> pexp_ident ~loc { loc; txt = lident "sexp_of_open" }
 ;;
 
 let generate_sexp_of (td : type_declaration) : structure_item list =
