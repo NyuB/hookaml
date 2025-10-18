@@ -179,14 +179,35 @@ type record_light =
   }
 [@@deriving sexp_light]
 
+type variant_light =
+  | One
+  | Two of int
+[@@deriving sexp_light]
+
+let print_serialized ~sexp_of ~label record =
+  print_endline (Printf.sprintf "%s: %s" label (Sexp.to_string_hum (sexp_of record)))
+;;
+
 let%expect_test "Record printing (light) (success)" =
-  let print_serialized ~sexp_of ~label record =
-    print_endline (Printf.sprintf "%s: %s" label (Sexp.to_string_hum (sexp_of record)))
+  let print_serialized ~label record =
+    print_serialized ~sexp_of:sexp_of_record_light ~label record
   in
   print_serialized
-    ~sexp_of:sexp_of_record_light
     ~label:"Happy path"
     { i = 1; s = "one"; opt_str = None; opt_opt_str = Some None; list_str = [ "a"; "b" ] };
   [%expect
     {| Happy path: ((i 1) (s one) (opt_str none) (opt_opt_str (some none)) (list_str (a b))) |}]
+;;
+
+let%expect_test "Variant printing (light) (success)" =
+  let print_serialized ~label variant =
+    print_serialized ~sexp_of:sexp_of_variant_light ~label variant
+  in
+  print_serialized ~label:"No arg" One;
+  print_serialized ~label:"Single arg" (Two 2);
+  [%expect
+    {|
+    No arg: one
+    Single arg: (two 2)
+    |}]
 ;;
