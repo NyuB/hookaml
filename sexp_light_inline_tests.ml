@@ -191,7 +191,7 @@ let print_serialized ~sexp_of ~label record =
   print_endline (Printf.sprintf "%s: %s" label (Sexp.to_string_hum (sexp_of record)))
 ;;
 
-let%expect_test "Record printing (light) (success)" =
+let%expect_test "Record printing (light)" =
   let print_serialized ~label record =
     print_serialized ~sexp_of:sexp_of_record_light ~label record
   in
@@ -202,7 +202,7 @@ let%expect_test "Record printing (light) (success)" =
     {| Happy path: ((i 1) (s one) (opt_str none) (opt_opt_str (some none)) (list_str (a b))) |}]
 ;;
 
-let%expect_test "Variant printing (light) (success)" =
+let%expect_test "Variant printing (light)" =
   let print_serialized ~label variant =
     print_serialized ~sexp_of:sexp_of_variant_light ~label variant
   in
@@ -217,7 +217,7 @@ let%expect_test "Variant printing (light) (success)" =
     |}]
 ;;
 
-let%expect_test "Alias printing (light) (success)" =
+let%expect_test "Alias printing (light)" =
   print_serialized
     ~label:"Alias"
     ~sexp_of:sexp_of_record_light_option_list
