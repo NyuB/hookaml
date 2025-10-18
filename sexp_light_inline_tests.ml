@@ -101,17 +101,14 @@ let show_record
     (show_list quote field_list_str)
 ;;
 
-let print_parsed_record ~label record_str =
+let print_parsed ~of_sexp ~label record_str =
   print_endline
-    (Printf.sprintf
-       "%s: %s"
-       label
-       (show_record (record_of_sexp (Sexp.of_string record_str))))
+    (Printf.sprintf "%s: %s" label (show_record (of_sexp (Sexp.of_string record_str))))
 ;;
 
-let print_parser_record_error ~label record_str =
+let print_parse_error ~of_sexp ~label record_str =
   try
-    let record = record_of_sexp (Sexp.of_string record_str) in
+    let record = of_sexp (Sexp.of_string record_str) in
     print_endline
       (Printf.sprintf
          "/!\\ Unexpected parse success /!\\ %s: %s"
@@ -122,6 +119,7 @@ let print_parser_record_error ~label record_str =
 ;;
 
 let%expect_test "Record parsing (success)" =
+  let print_parsed_record = print_parsed ~of_sexp:record_of_sexp in
   print_parsed_record
     ~label:"Happy path"
     {|(
@@ -145,6 +143,7 @@ let%expect_test "Record parsing (success)" =
 ;;
 
 let%expect_test "Parse record (errors)" =
+  let print_parser_record_error = print_parse_error ~of_sexp:record_of_sexp in
   print_parser_record_error ~label:"Missing all fields" "()";
   print_parser_record_error ~label:"Not a list" "atom";
   print_parser_record_error
@@ -176,3 +175,11 @@ type record_light =
   ; s : string
   }
 [@@deriving sexp_light]
+
+let%expect_test "Record printing (light) (success)" =
+  let print_serialized ~sexp_of ~label record =
+    print_endline (Printf.sprintf "%s: %s" label (Sexp.to_string_hum (sexp_of record)))
+  in
+  print_serialized ~sexp_of:sexp_of_record_light ~label:"Happy path" { i = 1; s = "one" };
+  [%expect {| Happy path: ((i 1) (s one)) |}]
+;;
