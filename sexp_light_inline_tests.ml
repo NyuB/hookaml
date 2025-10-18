@@ -10,8 +10,12 @@ let print_parsed ~label sexp_str =
 
 let print_parse_error ~label sexp_str =
   try
-    Sexp.of_string sexp_str |> ignore;
-    print_endline (Printf.sprintf "%s: /!\\ Unexpected parse sucess /!\\" label)
+    let parsed = Sexp.of_string sexp_str in
+    print_endline
+      (Printf.sprintf
+         "/!\\ Unexpected parse success /!\\ %s: %s"
+         label
+         (Sexp.to_string_hum parsed))
   with
   | exn -> print_endline (Printf.sprintf "%s: %s" label (Printexc.to_string exn))
 ;;
@@ -35,6 +39,19 @@ let%expect_test "Parse (success)" =
 ;;
 
 let%expect_test "Parse (errors)" =
-  print_parse_error ~label:"missing closing paren" "(";
-  [%expect {| missing closing paren: Invalid_argument("index out of bounds") |}]
+  print_parse_error ~label:"Missing closing paren" "(";
+  print_parse_error ~label:"Missing opening paren" ")";
+  print_parse_error ~label:"Missing closing quote" {|"atom|};
+  print_parse_error ~label:"Dangling quote" {|(at"om)|};
+  print_parse_error ~label:"Unexpected list" "a b";
+  print_parse_error ~label:"Unexpected list" "a (b)";
+  [%expect
+    {|
+    Missing closing paren: Failure("Unexpected end of input at character 1")
+    Missing opening paren: Failure("Unexpected ')' without matching '(' at character 0")
+    Missing closing quote: Failure("Unexpected end of input at character 5, expected closing quote '\"'")
+    Dangling quote: Failure("Invalid atom character '\"' at character 3")
+    Unexpected list: Failure("Unexpected character 'b' at position 2, expected end of input")
+    Unexpected list: Failure("Unexpected character '(' at position 2, expected end of input")
+    |}]
 ;;

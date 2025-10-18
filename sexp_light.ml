@@ -74,9 +74,17 @@ module Sexp = struct
     ; s : string
     }
 
+  let end_of_input parser = String.length parser.s <= parser.index
   let skip parser = parser.index <- parser.index + 1
 
   let expect parser c =
+    if end_of_input parser
+    then
+      failwith
+        (Printf.sprintf
+           "Unexpected end of input at character %d, expected '%c'"
+           parser.index
+           c);
     if String.get parser.s parser.index != c
     then
       failwith
@@ -87,7 +95,11 @@ module Sexp = struct
     skip parser
   ;;
 
-  let peek parser = String.get parser.s parser.index
+  let peek parser =
+    if end_of_input parser
+    then failwith (Printf.sprintf "Unexpected end of input at character %d" parser.index);
+    String.get parser.s parser.index
+  ;;
 
   let read parser =
     let c = peek parser in
@@ -96,9 +108,8 @@ module Sexp = struct
   ;;
 
   let skip_whitespaces parser =
-    let l = String.length parser.s in
     while
-      parser.index < l
+      (not (end_of_input parser))
       && (peek parser == ' ' || peek parser == '\t' || peek parser == '\n')
     do
       skip parser
@@ -112,8 +123,15 @@ module Sexp = struct
     let final () = String.of_bytes (Buffer.to_bytes buff) in
     let push c = Buffer.add_char buff c in
     let rec aux () =
-      if parser.index = String.length parser.s
-      then if quoted then failwith "Expected closing quote '\"'" else final ()
+      if end_of_input parser
+      then
+        if quoted
+        then
+          failwith
+            (Printf.sprintf
+               "Unexpected end of input at character %d, expected closing quote '\"'"
+               parser.index)
+        else final ()
       else (
         match peek parser with
         | '"' ->
@@ -121,7 +139,9 @@ module Sexp = struct
           then (
             skip parser;
             final ())
-          else failwith "Invalid atom character '\"'"
+          else
+            failwith
+              (Printf.sprintf "Invalid atom character '\"' at character %d" parser.index)
         | ')' | '(' | ' ' | '\t' | '\n' ->
           if quoted
           then (
@@ -160,7 +180,26 @@ module Sexp = struct
       done;
       expect parser ')';
       List (Dynarray.to_list items))
+    else if peek parser = ')'
+    then
+      failwith
+        (Printf.sprintf
+           "Unexpected ')' without matching '(' at character %d"
+           parser.index)
     else Atom (read_atom parser)
+  ;;
+
+  let read_sexp parser =
+    let sexp = read_sexp parser in
+    skip_whitespaces parser;
+    if end_of_input parser
+    then sexp
+    else
+      failwith
+        (Printf.sprintf
+           "Unexpected character '%c' at position %d, expected end of input"
+           (peek parser)
+           parser.index)
   ;;
 
   let of_string s = read_sexp { s; index = 0 }
