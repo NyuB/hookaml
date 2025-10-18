@@ -2,9 +2,22 @@
  (public_name gitst)
  (name gitst)
  (modules gitst)
- (libraries substring unix)
+ (libraries sexp_light substring unix)
  (preprocess
   (pps ppx_sexp_conv)))
+
+(library
+ (name sexp_light)
+ (modules sexp_light)
+ (libraries))
+
+(library
+ (name sexp_light_inline_tests)
+ (modules sexp_light_inline_tests)
+ (libraries sexp_light)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))
 
 (library
  (name substring)
