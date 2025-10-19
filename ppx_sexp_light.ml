@@ -240,13 +240,13 @@ let generate_sexp_of (td : type_declaration) : structure_item list =
         ; pvb_attributes = []
         ; pvb_constraint = None
         ; pvb_expr =
-            (let record_argument_name = td.ptype_name.txt in
+            (let argument_name = td.ptype_name.txt in
              pexp_fun
                ~loc
                Nolabel
                None
-               (ppat_var ~loc { loc; txt = record_argument_name })
-               (sexp_of_body ~loc td record_argument_name))
+               (ppat_var ~loc { loc; txt = argument_name })
+               (sexp_of_body ~loc td argument_name))
         }
       ]
   ]
