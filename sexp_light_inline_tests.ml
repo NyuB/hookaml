@@ -250,3 +250,21 @@ let%expect_test "Alias sexp_of (light)" =
     M.(t): m
     |}]
 ;;
+
+let show_variant = function
+  | One -> "One"
+  | Two n -> Printf.sprintf "Two %d" n
+  | Three (n, s) -> Printf.sprintf "Three (%d, %s)" n s
+;;
+
+let print_deserialized ~label of_sexp show sexp =
+  try
+    print_endline (Printf.sprintf "%s: %s" label (show (of_sexp (Sexp.of_string sexp))))
+  with
+  | exn -> print_endline (Printf.sprintf "%s: %s" label (Printexc.to_string exn))
+;;
+
+let%expect_test "Variant of_sexp (light)" =
+  print_deserialized ~label:"No arg" variant_light_of_sexp show_variant "one";
+  [%expect {| No arg: Failure("Not implemented: _variant_light_of_sexp") |}]
+;;

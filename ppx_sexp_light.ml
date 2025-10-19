@@ -25,6 +25,13 @@ end
 
 module Embed_error = struct
   let exp ~loc msg = pexp_extension ~loc (Location.error_extensionf ~loc msg)
+
+  let failwith ~loc msg =
+    pexp_apply
+      ~loc
+      (pexp_ident ~loc { loc; txt = lident "failwith" })
+      [ Nolabel, pexp_constant ~loc (Pconst_string (msg, loc, None)) ]
+  ;;
 end
 
 let rec pexp_list ~loc = function
@@ -247,32 +254,66 @@ let sexp_of_body ~loc (td : type_declaration) (argument_name : string) : express
   | Ptype_open -> Embed_error.exp ~loc "Cannot derive sexp_of for open types"
 ;;
 
-let generate_sexp_of (td : type_declaration) : structure_item list =
+let generate_sexp_of (td : type_declaration) : structure_item =
   let sexp_of_t = Printf.sprintf "sexp_of_%s" td.ptype_name.txt in
   let loc = td.ptype_loc in
-  [ pstr_value
-      ~loc
-      Nonrecursive
-      [ { pvb_pat = ppat_var ~loc { loc; txt = sexp_of_t }
-        ; pvb_loc = loc
-        ; pvb_attributes = []
-        ; pvb_constraint = None
-        ; pvb_expr =
-            (let argument_name = td.ptype_name.txt in
-             pexp_fun
-               ~loc
-               Nolabel
-               None
-               (ppat_var ~loc { loc; txt = argument_name })
-               (sexp_of_body ~loc td argument_name))
-        }
-      ]
-  ]
+  pstr_value
+    ~loc
+    Nonrecursive
+    [ { pvb_pat = ppat_var ~loc { loc; txt = sexp_of_t }
+      ; pvb_loc = loc
+      ; pvb_attributes = []
+      ; pvb_constraint = None
+      ; pvb_expr =
+          (let argument_name = td.ptype_name.txt in
+           pexp_fun
+             ~loc
+             Nolabel
+             None
+             (ppat_var ~loc { loc; txt = argument_name })
+             (sexp_of_body ~loc td argument_name))
+      }
+    ]
+;;
+
+let of_sexp_body ~loc (td : type_declaration) argument_name =
+  match td.ptype_kind with
+  | Ptype_variant _ ->
+    Embed_error.failwith ~loc (Printf.sprintf "Not implemented: %s_of_sexp" argument_name)
+  | Ptype_abstract -> Embed_error.failwith ~loc "Unsupported of_sexp for abstract types"
+  | Ptype_record _ -> Embed_error.failwith ~loc "Unsupported of_sexp for record types"
+  | Ptype_open -> Embed_error.failwith ~loc "Unsupported of_sexp for M.(t) type open"
+;;
+
+let generate_of_sexp (td : type_declaration) : structure_item =
+  let t_of_sexp = Printf.sprintf "%s_of_sexp" td.ptype_name.txt in
+  let loc = td.ptype_loc in
+  pstr_value
+    ~loc
+    Nonrecursive
+    [ { pvb_pat = ppat_var ~loc { loc; txt = t_of_sexp }
+      ; pvb_loc = loc
+      ; pvb_attributes = []
+      ; pvb_constraint = None
+      ; pvb_expr =
+          (let argument_name = Printf.sprintf "_%s" td.ptype_name.txt in
+           pexp_fun
+             ~loc
+             Nolabel
+             None
+             (ppat_var ~loc { loc; txt = argument_name })
+             (of_sexp_body ~loc td argument_name))
+      }
+    ]
+;;
+
+let generate_sexp_conv (td : type_declaration) : structure_item list =
+  [ generate_sexp_of td; generate_of_sexp td ]
 ;;
 
 let generate_impl ~ctxt (_rec_flag, (type_declarations : type_declaration list)) =
   ignore ctxt;
-  List.concat_map generate_sexp_of type_declarations
+  List.concat_map generate_sexp_conv type_declarations
 ;;
 
 let impl_generator = Deriving.Generator.V2.make_noarg generate_impl
