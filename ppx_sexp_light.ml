@@ -206,7 +206,12 @@ let sexp_of_case_of_constructor ~loc (constructor : constructor_declaration) =
            in
            { pattern; expression })
         l
-    | Pcstr_record _ -> failwith "Unsupported inline record in variant constructor"
+    | Pcstr_record _ ->
+      [ { pattern = ppat_any ~loc
+        ; expression =
+            Embed_error.exp ~loc "Unsupported inline record in variant constructor"
+        }
+      ]
   in
   case
     ~lhs:
