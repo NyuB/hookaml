@@ -18,6 +18,9 @@ let generate_index_of_field ~loc names =
 (** [(Lident "A") %. "B"] is [A.B] *)
 let ( %. ) a b = Longident.Ldot (a, b)
 
+let ident ~loc s = pexp_ident ~loc { loc; txt = lident s }
+let dot_ident ~loc modul name = pexp_ident ~loc { loc; txt = Ldot (modul, name) }
+
 module Modules = struct
   let std_list = lident "Stdlib" %. "List"
   let sexplib = lident "Sexplib"
@@ -111,8 +114,8 @@ let sexp_of_tuple
 
 (** [sexp_of_desc ~loc t] is a function applicable to an expression [e] of type [t] that would produce the conversion of [e] to a sexp *)
 let rec sexp_of_desc ~loc (t : core_type_desc) : expression =
-  let ident s = pexp_ident ~loc { loc; txt = lident s } in
-  let dot_ident modul name = pexp_ident ~loc { loc; txt = Ldot (modul, name) } in
+  let ident = ident ~loc
+  and dot_ident = dot_ident ~loc in
   match t with
   | Ptyp_constr ({ loc = _; txt = qualified_type }, []) ->
     (match qualified_type with
@@ -281,10 +284,148 @@ let generate_sexp_of (td : type_declaration) : structure_item =
     ]
 ;;
 
+let pattern_constant_string ~loc s = ppat_constant ~loc (Pconst_string (s, loc, None))
+
+let rec ppat_list ~loc = function
+  | [] -> ppat_construct ~loc { loc; txt = Modules.std_list %. "[]" } None
+  | exp :: tail ->
+    ppat_construct
+      ~loc
+      { loc; txt = Modules.std_list %. "::" }
+      (Some (ppat_tuple ~loc [ exp; ppat_list ~loc tail ]))
+;;
+
+let pattern_constant_atom_constructor ~loc constructor_name =
+  ppat_construct
+    ~loc
+    { loc; txt = Modules.sexplib %. "Sexp" %. "Atom" }
+    (Some
+       (ppat_or
+          ~loc
+          (pattern_constant_string ~loc constructor_name)
+          (pattern_constant_string ~loc (uncapitalize_ascii constructor_name))))
+;;
+
+let pattern_sexp_list ~loc patterns =
+  ppat_construct
+    ~loc
+    { loc; txt = Modules.sexplib %. "Sexp" %. "List" }
+    (Some (ppat_list ~loc patterns))
+;;
+
+let tuple_of_sexp ~loc desc_of_sexp (types : core_type list) =
+  let args =
+    List.mapi
+      (fun i typ ->
+         let param_name = Printf.sprintf "arg_%d" i in
+         { pattern = ppat_var ~loc { loc; txt = param_name }
+         ; expression =
+             pexp_apply
+               ~loc
+               (desc_of_sexp ~loc typ.ptyp_desc)
+               [ Nolabel, pexp_ident ~loc { loc; txt = lident param_name } ]
+         })
+      types
+  in
+  pexp_function_cases
+    ~loc
+    [ case
+        ~lhs:(pattern_sexp_list ~loc (List.map (fun arg -> arg.pattern) args))
+        ~guard:None
+        ~rhs:(pexp_tuple ~loc (List.map (fun arg -> arg.expression) args))
+    ; case
+        ~lhs:(ppat_any ~loc)
+        ~guard:None
+        ~rhs:(Embed_error.failwith ~loc "tuple_of_sexp error")
+    ]
+;;
+
+let rec desc_of_sexp ~loc (desc : core_type_desc) =
+  match desc with
+  | Ptyp_constr ({ txt = qualified_type; loc }, []) ->
+    (match qualified_type with
+     | Lident typ -> ident ~loc (Printf.sprintf "%s_of_sexp" typ)
+     | Ldot (modul, typ) -> dot_ident ~loc modul (Printf.sprintf "%s_of_sexp" typ)
+     | Lapply (_, _) -> Embed_error.exp ~loc "Unsupported of_sexp for applied types")
+  | Ptyp_tuple types -> tuple_of_sexp ~loc desc_of_sexp types
+  (* Unsupported *)
+  | Ptyp_constr (_, _) ->
+    Embed_error.exp ~loc "Unsupported of_sexp for parameterized types"
+  | Ptyp_any -> Embed_error.exp ~loc "Unsupported of_sexp for any type"
+  | Ptyp_var _ -> Embed_error.exp ~loc "Unsupported of_sexp for type parameters"
+  | Ptyp_arrow (_, _, _) -> Embed_error.exp ~loc "Unsupported of_sexp for function types"
+  | Ptyp_object (_, _) -> Embed_error.exp ~loc "Unsupported of_sexp for object types"
+  | Ptyp_class (_, _) -> Embed_error.exp ~loc "Unsupported of_sexp for class types"
+  | Ptyp_alias (_, _) -> Embed_error.exp ~loc "Unsupported of_sexp for alias types"
+  | Ptyp_variant (_, _, _) -> Embed_error.exp ~loc "Unsupported of_sexp for variant types"
+  | Ptyp_poly (_, _) -> Embed_error.exp ~loc "Unsupported of_sexp for polymorphic types"
+  | Ptyp_package _ -> Embed_error.exp ~loc "Unsupported of_sexp for module types"
+  | Ptyp_open (_, _) ->
+    Embed_error.exp ~loc "Unsupported of_sexp for M.(t) type expressions"
+  | Ptyp_extension _ -> Embed_error.exp ~loc "Unsupported of_sexp for extension types"
+;;
+
+let of_sexp_case_of_constructor (constructor : constructor_declaration) =
+  let loc = constructor.pcd_loc in
+  let args =
+    match constructor.pcd_args with
+    | Pcstr_record _ -> failwith "TODO"
+    | Pcstr_tuple l ->
+      List.mapi
+        (fun i (arg : core_type) ->
+           let arg_name = Printf.sprintf "arg_%d" i in
+           let pattern = ppat_var ~loc { loc; txt = arg_name } in
+           let expression =
+             pexp_apply
+               ~loc
+               (desc_of_sexp ~loc arg.ptyp_desc)
+               [ Nolabel, ident ~loc arg_name ]
+           in
+           { pattern; expression })
+        l
+  in
+  let constructor_name = constructor.pcd_name.txt in
+  case
+    ~lhs:
+      (match args with
+       | [] -> pattern_constant_atom_constructor ~loc constructor_name
+       | [ single ] ->
+         pattern_sexp_list
+           ~loc
+           [ pattern_constant_atom_constructor ~loc constructor_name; single.pattern ]
+       | multiple ->
+         pattern_sexp_list
+           ~loc
+           [ pattern_constant_atom_constructor ~loc constructor_name
+           ; pattern_sexp_list ~loc (List.map (fun arg -> arg.pattern) multiple)
+           ])
+    ~guard:None
+    ~rhs:
+      (match args with
+       | [] -> pexp_construct ~loc { loc; txt = lident constructor_name } None
+       | [ single ] ->
+         pexp_construct
+           ~loc
+           { loc; txt = lident constructor_name }
+           (Some single.expression)
+       | multiple ->
+         pexp_construct
+           ~loc
+           { loc; txt = lident constructor_name }
+           (Some (pexp_tuple ~loc (List.map (fun arg -> arg.expression) multiple))))
+;;
+
 let of_sexp_body ~loc (td : type_declaration) argument_name =
   match td.ptype_kind with
-  | Ptype_variant _ ->
-    Embed_error.failwith ~loc (Printf.sprintf "Not implemented: %s_of_sexp" argument_name)
+  | Ptype_variant constructors ->
+    let matching_cases = List.map of_sexp_case_of_constructor constructors in
+    let failing_case =
+      case
+        ~lhs:(ppat_any ~loc)
+        ~guard:None
+        ~rhs:(Embed_error.failwith ~loc (Printf.sprintf "%s_of_sexp error" argument_name))
+    in
+    pexp_match ~loc (ident ~loc argument_name) (matching_cases @ [ failing_case ])
   | Ptype_abstract -> Embed_error.failwith ~loc "Unsupported of_sexp for abstract types"
   | Ptype_record _ -> Embed_error.failwith ~loc "Unsupported of_sexp for record types"
   | Ptype_open -> Embed_error.failwith ~loc "Unsupported of_sexp for M.(t) type open"

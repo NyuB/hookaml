@@ -266,5 +266,16 @@ let print_deserialized ~label of_sexp show sexp =
 
 let%expect_test "Variant of_sexp (light)" =
   print_deserialized ~label:"No arg" variant_light_of_sexp show_variant "one";
-  [%expect {| No arg: Failure("Not implemented: _variant_light_of_sexp") |}]
+  print_deserialized ~label:"Single arg" variant_light_of_sexp show_variant "(two 2)";
+  print_deserialized
+    ~label:"Multiple args"
+    variant_light_of_sexp
+    show_variant
+    "(three (3 Trois))";
+  [%expect
+    {|
+    No arg: One
+    Single arg: Two 2
+    Multiple args: Three (3, Trois)
+    |}]
 ;;
