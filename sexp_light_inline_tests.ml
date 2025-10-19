@@ -25,7 +25,7 @@ let print_parse_error ~label sexp_str =
   | exn -> print_endline (Printf.sprintf "%s: %s" label (Printexc.to_string exn))
 ;;
 
-let%expect_test "Parse (success)" =
+let%expect_test "Sexp of_string (success)" =
   print_parsed ~label:"empty" "()";
   print_parsed ~label:"atom" "abcd";
   print_parsed ~label:"special characters" "a.b:c@d_e'";
@@ -43,7 +43,7 @@ let%expect_test "Parse (success)" =
     |}]
 ;;
 
-let%expect_test "Parse (errors)" =
+let%expect_test "Sexp of_string (errors)" =
   print_parse_error ~label:"Missing closing paren" "(";
   print_parse_error ~label:"Missing opening paren" ")";
   print_parse_error ~label:"Missing closing quote" {|"atom|};
@@ -101,9 +101,12 @@ let show_record
     (show_list quote field_list_str)
 ;;
 
-let print_parsed ~of_sexp ~label record_str =
+let print_parsed ~label record_str =
   print_endline
-    (Printf.sprintf "%s: %s" label (show_record (of_sexp (Sexp.of_string record_str))))
+    (Printf.sprintf
+       "%s: %s"
+       label
+       (show_record (record_of_sexp (Sexp.of_string record_str))))
 ;;
 
 let print_parse_error ~of_sexp ~label record_str =
@@ -118,16 +121,15 @@ let print_parse_error ~of_sexp ~label record_str =
   | exn -> print_endline (Printf.sprintf "%s: %s" label (Printexc.to_string exn))
 ;;
 
-let%expect_test "Record parsing (success)" =
-  let print_parsed_record = print_parsed ~of_sexp:record_of_sexp in
-  print_parsed_record
+let%expect_test "Record of_sexp (success)" =
+  print_parsed
     ~label:"Happy path"
     {|(
       (field_str str) (field_int 1) (field_float 2) (field_char a)
       (field_opt_str (some opt))
       (field_list_str (stra strb strc))
       )|};
-  print_parsed_record
+  print_parsed
     ~label:"Out of order"
     {|(
       (field_int 1) (field_float 2)
@@ -142,7 +144,7 @@ let%expect_test "Record parsing (success)" =
     |}]
 ;;
 
-let%expect_test "Parse record (errors)" =
+let%expect_test "Record of_sexp (errors)" =
   let print_parser_record_error = print_parse_error ~of_sexp:record_of_sexp in
   print_parser_record_error ~label:"Missing all fields" "()";
   print_parser_record_error ~label:"Not a list" "atom";
@@ -198,7 +200,7 @@ let print_serialized ~sexp_of ~label record =
   print_endline (Printf.sprintf "%s: %s" label (Sexp.to_string_hum (sexp_of record)))
 ;;
 
-let%expect_test "Record printing (light)" =
+let%expect_test "Record sexp_of (light)" =
   let print_serialized ~label record =
     print_serialized ~sexp_of:sexp_of_record_light ~label record
   in
@@ -209,7 +211,7 @@ let%expect_test "Record printing (light)" =
     {| Happy path: ((i 1) (s one) (opt_str none) (opt_opt_str (some none)) (list_str (a b))) |}]
 ;;
 
-let%expect_test "Variant printing (light)" =
+let%expect_test "Variant sexp_of (light)" =
   let print_serialized ~label variant =
     print_serialized ~sexp_of:sexp_of_variant_light ~label variant
   in
@@ -224,7 +226,7 @@ let%expect_test "Variant printing (light)" =
     |}]
 ;;
 
-let%expect_test "Alias printing (light)" =
+let%expect_test "Alias sexp_of (light)" =
   print_serialized
     ~label:"Alias"
     ~sexp_of:sexp_of_record_light_option_list
