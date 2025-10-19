@@ -127,6 +127,16 @@ let rec sexp_of_desc ~loc (t : core_type_desc) : expression =
   | Ptyp_constr (lst, [ t ]) when is_type "list" lst ->
     pexp_apply ~loc (ident "sexp_of_list") [ Nolabel, sexp_of_desc ~loc t.ptyp_desc ]
   | Ptyp_tuple types -> sexp_of_tuple ~loc sexp_of_desc types
+  | Ptyp_open (modul, typ) ->
+    pexp_open
+      ~loc
+      { popen_expr =
+          { pmod_loc = loc; pmod_desc = Pmod_ident modul; pmod_attributes = [] }
+      ; popen_override = Fresh
+      ; popen_attributes = []
+      ; popen_loc = loc
+      }
+      (sexp_of_desc ~loc typ.ptyp_desc)
   (* Unsupported *)
   | Ptyp_constr (_, _) ->
     Embed_error.exp
@@ -143,7 +153,6 @@ let rec sexp_of_desc ~loc (t : core_type_desc) : expression =
     Embed_error.exp ~loc "Cannot derive sexp_of for variant types"
   | Ptyp_poly (_, _) -> Embed_error.exp ~loc "Cannot derive sexp_of for poly types"
   | Ptyp_package _ -> Embed_error.exp ~loc "Cannot derive sexp_of for package types"
-  | Ptyp_open (_, _) -> Embed_error.exp ~loc "Cannot derive sexp_of for open types"
   | Ptyp_extension _ -> Embed_error.exp ~loc "Cannot derive sexp_of for extension types"
 ;;
 

@@ -187,6 +187,13 @@ type variant_light =
 
 type record_light_option_list = record_light option list [@@deriving sexp_light]
 
+module M = struct
+  type t = M [@@deriving sexp_light]
+end
+
+type m = M.t [@@deriving sexp_light]
+type m_open = M.(t) [@@deriving sexp_light]
+
 let print_serialized ~sexp_of ~label record =
   print_endline (Printf.sprintf "%s: %s" label (Sexp.to_string_hum (sexp_of record)))
 ;;
@@ -230,10 +237,14 @@ let%expect_test "Alias printing (light)" =
         ; list_str = [ "a"; "b" ]
         }
     ];
+  print_serialized ~label:"M.t" ~sexp_of:sexp_of_m M.M;
+  print_serialized ~label:"M.(t)" ~sexp_of:sexp_of_m_open M.M;
   [%expect
     {|
     Alias: (none
      (some
       ((i 1) (s one) (opt_str none) (opt_opt_str (some none)) (list_str (a b)))))
+    M.t: m
+    M.(t): m
     |}]
 ;;
