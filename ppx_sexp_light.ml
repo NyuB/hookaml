@@ -23,6 +23,10 @@ module Modules = struct
   let sexplib = lident "Sexplib"
 end
 
+module Embed_error = struct
+  let exp ~loc msg = pexp_extension ~loc (Location.error_extensionf ~loc msg)
+end
+
 let rec pexp_list ~loc = function
   | [] -> pexp_construct ~loc { loc; txt = Modules.std_list %. "[]" } None
   | exp :: tail ->
@@ -122,20 +126,25 @@ let rec sexp_of_desc ~loc (t : core_type_desc) : expression =
     pexp_apply ~loc (ident "sexp_of_option") [ Nolabel, sexp_of_desc ~loc t.ptyp_desc ]
   | Ptyp_constr (lst, [ t ]) when is_type "list" lst ->
     pexp_apply ~loc (ident "sexp_of_list") [ Nolabel, sexp_of_desc ~loc t.ptyp_desc ]
-  (* Unsupported *)
-  | Ptyp_constr (_, _) -> ident "sexp_of_constr"
-  | Ptyp_any -> ident "sexp_of_any"
-  | Ptyp_var _ -> ident "sexp_of_var"
-  | Ptyp_arrow (_, _, _) -> ident "sexp_of_arrow"
   | Ptyp_tuple types -> sexp_of_tuple ~loc sexp_of_desc types
-  | Ptyp_object (_, _) -> ident "sexp_of_object"
-  | Ptyp_class (_, _) -> ident "sexp_of_class"
-  | Ptyp_alias (_, _) -> ident "sexp_of_alias"
-  | Ptyp_variant (_, _, _) -> ident "sexp_of_variant"
-  | Ptyp_poly (_, _) -> ident "sexp_of_poly"
-  | Ptyp_package _ -> ident "sexp_of_package"
-  | Ptyp_open (_, _) -> ident "sexp_of_open"
-  | Ptyp_extension _ -> ident "sexp_of_extension"
+  (* Unsupported *)
+  | Ptyp_constr (_, _) ->
+    Embed_error.exp
+      ~loc
+      "Cannot derive sexp_of for parameterized types other than option and list"
+  | Ptyp_any -> Embed_error.exp ~loc "Cannot derive sexp_of for any types"
+  | Ptyp_var _ -> Embed_error.exp ~loc "Cannot derive sexp_of for type variables"
+  | Ptyp_arrow (_, _, _) ->
+    Embed_error.exp ~loc "Cannot derive sexp_of for function types"
+  | Ptyp_object (_, _) -> Embed_error.exp ~loc "Cannot derive sexp_of for object types"
+  | Ptyp_class (_, _) -> Embed_error.exp ~loc "Cannot derive sexp_of for class types"
+  | Ptyp_alias (_, _) -> Embed_error.exp ~loc "Cannot derive sexp_of for alias types"
+  | Ptyp_variant (_, _, _) ->
+    Embed_error.exp ~loc "Cannot derive sexp_of for variant types"
+  | Ptyp_poly (_, _) -> Embed_error.exp ~loc "Cannot derive sexp_of for poly types"
+  | Ptyp_package _ -> Embed_error.exp ~loc "Cannot derive sexp_of for package types"
+  | Ptyp_open (_, _) -> Embed_error.exp ~loc "Cannot derive sexp_of for open types"
+  | Ptyp_extension _ -> Embed_error.exp ~loc "Cannot derive sexp_of for extension types"
 ;;
 
 let sexp_of_field_declaration ~loc (typ : label_declaration) : expression =
@@ -220,13 +229,13 @@ let sexp_of_body ~loc (td : type_declaration) (argument_name : string) : express
       (List.map (sexp_of_case_of_constructor ~loc) constructors)
   | Ptype_abstract ->
     (match td.ptype_manifest with
-     | None -> pexp_ident ~loc { loc; txt = lident "sexp_of_abstract" }
-     | Some t ->
+     | None (* type t *) -> Embed_error.exp ~loc "Cannot derive sexp_of for empty types"
+     | Some t (* type alias = t *) ->
        pexp_apply
          ~loc
          (sexp_of_desc ~loc t.ptyp_desc)
          [ Nolabel, pexp_ident ~loc { loc; txt = lident argument_name } ])
-  | Ptype_open -> pexp_ident ~loc { loc; txt = lident "sexp_of_open" }
+  | Ptype_open -> Embed_error.exp ~loc "Cannot derive sexp_of for open types"
 ;;
 
 let generate_sexp_of (td : type_declaration) : structure_item list =
