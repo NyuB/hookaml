@@ -191,6 +191,10 @@ type record_light_option_list = record_light option list [@@deriving sexp_light]
 
 module M = struct
   type t = M [@@deriving sexp_light]
+
+  let show = function
+    | M -> "M"
+  ;;
 end
 
 type m = M.t [@@deriving sexp_light]
@@ -278,4 +282,9 @@ let%expect_test "Variant of_sexp (light)" =
     Single arg: Two 2
     Multiple args: Three (3, Trois)
     |}]
+;;
+
+let%expect_test "Alias of_sexp (light)" =
+  print_deserialized ~label:"alias" m_of_sexp M.show "m";
+  [%expect {| alias: M |}]
 ;;

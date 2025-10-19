@@ -348,9 +348,28 @@ let rec desc_of_sexp ~loc (desc : core_type_desc) =
      | Ldot (modul, typ) -> dot_ident ~loc modul (Printf.sprintf "%s_of_sexp" typ)
      | Lapply (_, _) -> Embed_error.exp ~loc "Unsupported of_sexp for applied types")
   | Ptyp_tuple types -> tuple_of_sexp ~loc desc_of_sexp types
+  | Ptyp_constr (opt, [ t ]) when is_type "option" opt ->
+    pexp_apply
+      ~loc
+      (ident ~loc "option_of_sexp")
+      [ Nolabel, desc_of_sexp ~loc t.ptyp_desc ]
+  | Ptyp_constr (list, [ t ]) when is_type "list" list ->
+    pexp_apply ~loc (ident ~loc "list_of_sexp") [ Nolabel, desc_of_sexp ~loc t.ptyp_desc ]
+  | Ptyp_open (modul, typ) ->
+    pexp_open
+      ~loc
+      { popen_expr =
+          { pmod_loc = loc; pmod_desc = Pmod_ident modul; pmod_attributes = [] }
+      ; popen_override = Fresh
+      ; popen_attributes = []
+      ; popen_loc = loc
+      }
+      (desc_of_sexp ~loc typ.ptyp_desc)
   (* Unsupported *)
   | Ptyp_constr (_, _) ->
-    Embed_error.exp ~loc "Unsupported of_sexp for parameterized types"
+    Embed_error.exp
+      ~loc
+      "Unsupported of_sexp for parameterized types other than list and option"
   | Ptyp_any -> Embed_error.exp ~loc "Unsupported of_sexp for any type"
   | Ptyp_var _ -> Embed_error.exp ~loc "Unsupported of_sexp for type parameters"
   | Ptyp_arrow (_, _, _) -> Embed_error.exp ~loc "Unsupported of_sexp for function types"
@@ -360,8 +379,6 @@ let rec desc_of_sexp ~loc (desc : core_type_desc) =
   | Ptyp_variant (_, _, _) -> Embed_error.exp ~loc "Unsupported of_sexp for variant types"
   | Ptyp_poly (_, _) -> Embed_error.exp ~loc "Unsupported of_sexp for polymorphic types"
   | Ptyp_package _ -> Embed_error.exp ~loc "Unsupported of_sexp for module types"
-  | Ptyp_open (_, _) ->
-    Embed_error.exp ~loc "Unsupported of_sexp for M.(t) type expressions"
   | Ptyp_extension _ -> Embed_error.exp ~loc "Unsupported of_sexp for extension types"
 ;;
 
@@ -426,7 +443,14 @@ let of_sexp_body ~loc (td : type_declaration) argument_name =
         ~rhs:(Embed_error.failwith ~loc (Printf.sprintf "%s_of_sexp error" argument_name))
     in
     pexp_match ~loc (ident ~loc argument_name) (matching_cases @ [ failing_case ])
-  | Ptype_abstract -> Embed_error.failwith ~loc "Unsupported of_sexp for abstract types"
+  | Ptype_abstract ->
+    (match td.ptype_manifest with
+     | None -> Embed_error.failwith ~loc "Unsupported of_sexp for empty type"
+     | Some t ->
+       pexp_apply
+         ~loc
+         (desc_of_sexp ~loc t.ptyp_desc)
+         [ Nolabel, ident ~loc argument_name ])
   | Ptype_record _ -> Embed_error.failwith ~loc "Unsupported of_sexp for record types"
   | Ptype_open -> Embed_error.failwith ~loc "Unsupported of_sexp for M.(t) type open"
 ;;
