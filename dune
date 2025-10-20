@@ -22,10 +22,15 @@
 (library
  (name substring)
  (modules substring)
+ (libraries))
+
+(library
+ (name substring_inline_tests)
+ (modules substring_inline_tests)
  (inline_tests)
  (preprocess
   (pps ppx_expect))
- (libraries))
+ (libraries substring))
 
 (library
  (name ppx_sexp_light)
