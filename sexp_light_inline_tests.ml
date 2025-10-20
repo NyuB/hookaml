@@ -181,6 +181,23 @@ type record_light =
   }
 [@@deriving sexp_light]
 
+let show_record_light
+      { i : int
+      ; s : string
+      ; opt_str : string option
+      ; opt_opt_str : string option option
+      ; list_str : string list
+      }
+  =
+  Printf.sprintf
+    "{ i = %d; s = %s; opt_str = %s; opt_opt_str = %s; list_str = %s }"
+    i
+    s
+    (show_option quote opt_str)
+    (show_option (show_option quote) opt_opt_str)
+    (show_list quote list_str)
+;;
+
 type variant_light =
   | One
   | Two of int
@@ -287,4 +304,22 @@ let%expect_test "Variant of_sexp (light)" =
 let%expect_test "Alias of_sexp (light)" =
   print_deserialized ~label:"alias" m_of_sexp M.show "m";
   [%expect {| alias: M |}]
+;;
+
+let%expect_test "Record of_sexp (light)" =
+  print_deserialized
+    ~label:"Happy path"
+    record_light_of_sexp
+    show_record_light
+    "((i 1) (s one) (opt_str none) (opt_opt_str (some none)) (list_str (a b)))";
+  print_deserialized
+    ~label:"Out of order"
+    record_light_of_sexp
+    show_record_light
+    "((opt_str none) (s one) (list_str (a b)) (opt_opt_str (some none)) (i 1))";
+  [%expect
+    {|
+    Happy path: { i = 1; s = one; opt_str = None; opt_opt_str = Some None; list_str = ["a"; "b"] }
+    Out of order: { i = 1; s = one; opt_str = None; opt_opt_str = Some None; list_str = ["a"; "b"] }
+    |}]
 ;;

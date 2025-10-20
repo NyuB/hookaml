@@ -1,33 +1,16 @@
 open Ppxlib
 open Ast_builder.Default
 
-(* Unused section for future of_sexp implementation *)
-let case_of_indexed_name ~loc i name =
-  case
-    ~lhs:(ppat_constant ~loc (Pconst_string (name, loc, None)))
-    ~guard:None
-    ~rhs:(pexp_constant ~loc (Pconst_integer (string_of_int i, None)))
-;;
-
-let generate_index_of_field ~loc names =
-  pexp_function_cases ~loc (List.mapi (case_of_indexed_name ~loc) names @ [])
-;;
-
-(* End of unused section *)
-
 (** [(Lident "A") %. "B"] is [A.B] *)
 let ( %. ) a b = Longident.Ldot (a, b)
 
 let ident ~loc s = pexp_ident ~loc { loc; txt = lident s }
 let dot_ident ~loc modul name = pexp_ident ~loc { loc; txt = Ldot (modul, name) }
-
-module Modules = struct
-  let std_list = lident "Stdlib" %. "List"
-  let sexplib = lident "Sexplib"
-end
+let false_constant ~loc = pexp_construct ~loc { loc; txt = lident "false" } None
 
 module Embed_error = struct
   let exp ~loc msg = pexp_extension ~loc (Location.error_extensionf ~loc msg)
+  let pat ~loc msg = ppat_extension ~loc (Location.error_extensionf ~loc msg)
 
   let failwith ~loc msg =
     pexp_apply
@@ -35,6 +18,11 @@ module Embed_error = struct
       (pexp_ident ~loc { loc; txt = lident "failwith" })
       [ Nolabel, pexp_constant ~loc (Pconst_string (msg, loc, None)) ]
   ;;
+end
+
+module Modules = struct
+  let std_list = lident "Stdlib" %. "List"
+  let sexplib = lident "Sexplib"
 end
 
 let rec pexp_list ~loc = function
@@ -386,7 +374,11 @@ let of_sexp_case_of_constructor (constructor : constructor_declaration) =
   let loc = constructor.pcd_loc in
   let args =
     match constructor.pcd_args with
-    | Pcstr_record _ -> failwith "TODO"
+    | Pcstr_record _ ->
+      [ { pattern = Embed_error.pat ~loc "Unsupported of_sexp for inline records"
+        ; expression = Embed_error.exp ~loc "Unsupported of_sexp for inline records"
+        }
+      ]
     | Pcstr_tuple l ->
       List.mapi
         (fun i (arg : core_type) ->
@@ -432,6 +424,96 @@ let of_sexp_case_of_constructor (constructor : constructor_declaration) =
            (Some (pexp_tuple ~loc (List.map (fun arg -> arg.expression) multiple))))
 ;;
 
+let case_of_indexed_name ~loc i name =
+  case
+    ~lhs:(ppat_constant ~loc (Pconst_string (name, loc, None)))
+    ~guard:None
+    ~rhs:(pexp_constant ~loc (Pconst_integer (string_of_int i, None)))
+;;
+
+let generate_index_of_field ~loc fields =
+  pexp_function_cases
+    ~loc
+    (List.mapi (case_of_indexed_name ~loc) (List.map (fun f -> f.pld_name.txt) fields)
+     @ [ case
+           ~lhs:(ppat_any ~loc)
+           ~guard:None
+           ~rhs:(Embed_error.failwith ~loc "of_sexp error")
+       ])
+;;
+
+let generate_create ~loc (fields : label_declaration list) =
+  let rec generate_pat i = function
+    | [] -> ppat_any ~loc
+    | (field : label_declaration) :: tail ->
+      ppat_tuple
+        ~loc
+        [ ppat_var ~loc { loc; txt = Printf.sprintf "%s_%d" field.pld_name.txt i }
+        ; generate_pat (i + 1) tail
+        ]
+  in
+  let arg_pattern = generate_pat 0 fields in
+  pexp_fun
+    ~loc
+    Nolabel
+    None
+    arg_pattern
+    (pexp_record
+       ~loc
+       (List.mapi
+          (fun i (field : label_declaration) ->
+             ( { loc = field.pld_loc; txt = lident field.pld_name.txt }
+             , ident ~loc:field.pld_loc (Printf.sprintf "%s_%d" field.pld_name.txt i) ))
+          fields)
+       None)
+;;
+
+type field_gadt =
+  { name : string
+  ; conv : expression
+  ; rest : expression
+  }
+
+let field_ident ~loc s = { loc; txt = lident s }
+let string_constant ~loc s = pexp_constant ~loc (Pconst_string (s, loc, None))
+
+let sexp_conv_field ~loc (field : field_gadt) =
+  pexp_construct
+    ~loc
+    { loc; txt = Modules.sexplib %. "Sexp_conv_record" %. "Field" }
+    (Some
+       (pexp_record
+          ~loc
+          [ field_ident ~loc "name", string_constant ~loc field.name
+          ; ( field_ident ~loc "kind"
+            , pexp_construct
+                ~loc
+                { loc; txt = Modules.sexplib %. "Sexp_conv_record" %. "Required" }
+                None )
+          ; field_ident ~loc "conv", field.conv
+          ; field_ident ~loc "rest", field.rest
+          ]
+          None))
+;;
+
+let generate_fields ~loc (fields : label_declaration list) : expression =
+  let rec aux = function
+    | [] ->
+      pexp_construct
+        ~loc
+        { loc; txt = Modules.sexplib %. "Sexp_conv_record" %. "Empty" }
+        None
+    | (field : label_declaration) :: tail ->
+      sexp_conv_field
+        ~loc
+        { name = field.pld_name.txt
+        ; rest = aux tail
+        ; conv = desc_of_sexp ~loc:field.pld_loc field.pld_type.ptyp_desc
+        }
+  in
+  aux fields
+;;
+
 let of_sexp_body ~loc (td : type_declaration) argument_name =
   match td.ptype_kind with
   | Ptype_variant constructors ->
@@ -451,7 +533,18 @@ let of_sexp_body ~loc (td : type_declaration) argument_name =
          ~loc
          (desc_of_sexp ~loc t.ptyp_desc)
          [ Nolabel, ident ~loc argument_name ])
-  | Ptype_record _ -> Embed_error.failwith ~loc "Unsupported of_sexp for record types"
+  | Ptype_record fields ->
+    pexp_apply
+      ~loc
+      (dot_ident ~loc (Modules.sexplib %. "Sexp_conv_record") "record_of_sexp")
+      [ Labelled "fields", generate_fields ~loc fields
+      ; Labelled "index_of_field", generate_index_of_field ~loc fields
+      ; Labelled "create", generate_create ~loc fields
+      ; ( Labelled "caller"
+        , string_constant ~loc (Printf.sprintf "%s_of_sexp" argument_name) )
+      ; Labelled "allow_extra_fields", false_constant ~loc
+      ; Nolabel, ident ~loc argument_name
+      ]
   | Ptype_open -> Embed_error.failwith ~loc "Unsupported of_sexp for M.(t) type open"
 ;;
 
@@ -466,7 +559,7 @@ let generate_of_sexp (td : type_declaration) : structure_item =
       ; pvb_attributes = []
       ; pvb_constraint = None
       ; pvb_expr =
-          (let argument_name = Printf.sprintf "_%s" td.ptype_name.txt in
+          (let argument_name = td.ptype_name.txt in
            pexp_fun
              ~loc
              Nolabel
