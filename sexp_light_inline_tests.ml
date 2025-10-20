@@ -204,6 +204,11 @@ type variant_light =
   | Three of (int * string)
 [@@deriving sexp_light]
 
+type recursive_variant =
+  | Root
+  | Pair of recursive_variant * recursive_variant
+[@@deriving sexp_light]
+
 type record_light_option_list = record_light option list [@@deriving sexp_light]
 
 module M = struct
@@ -233,17 +238,22 @@ let%expect_test "Record sexp_of (light)" =
 ;;
 
 let%expect_test "Variant sexp_of (light)" =
-  let print_serialized ~label variant =
-    print_serialized ~sexp_of:sexp_of_variant_light ~label variant
-  in
-  print_serialized ~label:"No arg" One;
-  print_serialized ~label:"Single arg" (Two 2);
-  print_serialized ~label:"Multiple args" (Three (3, "Trois"));
+  (let print_serialized ~label variant =
+     print_serialized ~sexp_of:sexp_of_variant_light ~label variant
+   in
+   print_serialized ~label:"No arg" One;
+   print_serialized ~label:"Single arg" (Two 2);
+   print_serialized ~label:"Multiple args" (Three (3, "Trois")));
+  print_serialized
+    ~label:"Recursive"
+    ~sexp_of:sexp_of_recursive_variant
+    (Pair (Root, Root));
   [%expect
     {|
     No arg: one
     Single arg: (two 2)
     Multiple args: (three (3 Trois))
+    Recursive: (pair root root)
     |}]
 ;;
 
@@ -278,6 +288,12 @@ let show_variant = function
   | Three (n, s) -> Printf.sprintf "Three (%d, %s)" n s
 ;;
 
+let rec show_recursive_variant = function
+  | Root -> "Root"
+  | Pair (a, b) ->
+    Printf.sprintf "Pair<%s, %s>" (show_recursive_variant a) (show_recursive_variant b)
+;;
+
 let print_deserialized ~label of_sexp show sexp =
   try
     print_endline (Printf.sprintf "%s: %s" label (show (of_sexp (Sexp.of_string sexp))))
@@ -293,11 +309,17 @@ let%expect_test "Variant of_sexp (light)" =
     variant_light_of_sexp
     show_variant
     "(three (3 Trois))";
+  print_deserialized
+    ~label:"Recursive"
+    recursive_variant_of_sexp
+    show_recursive_variant
+    "(pair root root)";
   [%expect
     {|
     No arg: One
     Single arg: Two 2
     Multiple args: Three (3, Trois)
+    Recursive: Pair<Root, Root>
     |}]
 ;;
 

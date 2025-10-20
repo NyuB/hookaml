@@ -225,9 +225,7 @@ let sexp_of_case_of_constructor ~loc (constructor : constructor_declaration) =
        | multiple ->
          sexp_list
            ~loc
-           [ constructor_atom
-           ; sexp_list ~loc (List.map (fun arg -> arg.expression) multiple)
-           ])
+           ([ constructor_atom ] @ List.map (fun arg -> arg.expression) multiple))
 ;;
 
 let sexp_of_body ~loc (td : type_declaration) (argument_name : string) : expression =
@@ -250,12 +248,56 @@ let sexp_of_body ~loc (td : type_declaration) (argument_name : string) : express
   | Ptype_open -> Embed_error.exp ~loc "Cannot derive sexp_of for open types"
 ;;
 
+let rec declaration_found_in_description
+          (declaration : type_declaration)
+          (desc : core_type_desc)
+  : bool
+  =
+  match desc with
+  | Ptyp_arrow (_, ta, tb) ->
+    declaration_found_in_description declaration ta.ptyp_desc
+    || declaration_found_in_description declaration tb.ptyp_desc
+  | Ptyp_constr ({ txt = Lident id; _ }, ts) ->
+    String.equal id declaration.ptype_name.txt
+    || List.exists (fun t -> declaration_found_in_description declaration t.ptyp_desc) ts
+  | Ptyp_constr (_, ts) | Ptyp_tuple ts ->
+    List.exists (fun t -> declaration_found_in_description declaration t.ptyp_desc) ts
+  | Ptyp_alias (t, _) | Ptyp_poly (_, t) | Ptyp_open (_, t) ->
+    declaration_found_in_description declaration t.ptyp_desc
+  | Ptyp_variant (_, _, _)
+  | Ptyp_package _ | Ptyp_extension _
+  | Ptyp_class (_, _)
+  | Ptyp_object (_, _)
+  | Ptyp_any | Ptyp_var _ -> false
+;;
+
+let type_recursivity (td : type_declaration) : rec_flag =
+  let all_implied_types =
+    match td.ptype_kind with
+    | Ptype_variant constructors ->
+      List.concat_map
+        (fun c ->
+           match c.pcd_args with
+           | Pcstr_tuple ts -> ts
+           | Pcstr_record _ -> [])
+        constructors
+    | Ptype_record fields -> List.map (fun f -> f.pld_type) fields
+    | _ -> []
+  in
+  if
+    List.exists
+      (fun t -> declaration_found_in_description td t.ptyp_desc)
+      all_implied_types
+  then Recursive
+  else Nonrecursive
+;;
+
 let generate_sexp_of (td : type_declaration) : structure_item =
   let sexp_of_t = Printf.sprintf "sexp_of_%s" td.ptype_name.txt in
   let loc = td.ptype_loc in
   pstr_value
     ~loc
-    Nonrecursive
+    (type_recursivity td)
     [ { pvb_pat = ppat_var ~loc { loc; txt = sexp_of_t }
       ; pvb_loc = loc
       ; pvb_attributes = []
@@ -405,9 +447,8 @@ let of_sexp_case_of_constructor (constructor : constructor_declaration) =
        | multiple ->
          pattern_sexp_list
            ~loc
-           [ pattern_constant_atom_constructor ~loc constructor_name
-           ; pattern_sexp_list ~loc (List.map (fun arg -> arg.pattern) multiple)
-           ])
+           ([ pattern_constant_atom_constructor ~loc constructor_name ]
+            @ List.map (fun arg -> arg.pattern) multiple))
     ~guard:None
     ~rhs:
       (match args with
@@ -553,7 +594,7 @@ let generate_of_sexp (td : type_declaration) : structure_item =
   let loc = td.ptype_loc in
   pstr_value
     ~loc
-    Nonrecursive
+    (type_recursivity td)
     [ { pvb_pat = ppat_var ~loc { loc; txt = t_of_sexp }
       ; pvb_loc = loc
       ; pvb_attributes = []
