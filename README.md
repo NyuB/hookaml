@@ -18,9 +18,10 @@ For developers: `watch -n 1 'dune exec ./gitst.exe w.sexp w.out'` ensures to upd
 
 ## Development
 
-- run the tests: `make test`
-- update the tests' expectations: `make test-promote`
-- format source code: `make fmt`
+- continously run gitst in watch (compile + exec) mode: `./w.sh` (linux) or `py w.py` (windows)
+- run the tests (linux only): `make test`
+- update the tests' expectations (linux only): `make test-promote`
+- format source code (linux only): `make fmt`
 
 ## Installation
 
