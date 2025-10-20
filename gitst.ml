@@ -74,7 +74,7 @@ module Workspace = struct
     | Ends_with of string
     | Contains of string
     | On of (select * predicate)
-  [@@deriving sexp]
+  [@@deriving sexp_light]
 
   type show =
     | Worktree
@@ -84,14 +84,14 @@ module Workspace = struct
     | Filter of predicate * show
     | Select of select * show
     | Format of select list * show
-  [@@deriving sexp]
+  [@@deriving sexp_light]
 
   type projection =
     { repo : string
     ; describe : string
     ; show : show
     }
-  [@@deriving sexp]
+  [@@deriving sexp_light]
 
   type item =
     | Projection of projection
@@ -114,7 +114,7 @@ module Workspace = struct
            (Sexplib.Sexp.to_string_hum s)
   ;;
 
-  type t = item list [@@deriving sexp]
+  type t = item list [@@deriving sexp_light]
 end
 
 module Status = struct
@@ -124,7 +124,7 @@ module Status = struct
       | Modified of string
       | Untracked of string
       | Removed of string
-    [@@deriving sexp]
+    [@@deriving sexp_light]
 
     let status = function
       | Added _ -> "Added"
