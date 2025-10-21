@@ -25,17 +25,8 @@ module Sexp = struct
           | '\n' ->
             Buffer.add_string buff "\\n";
             aux true (i + 1)
-          | ' ' ->
-            Buffer.add_char buff ' ';
-            aux true (i + 1)
-          | '\t' ->
-            Buffer.add_char buff '\t';
-            aux true (i + 1)
-          | '(' ->
-            Buffer.add_char buff '(';
-            aux true (i + 1)
-          | ')' ->
-            Buffer.add_char buff ')';
+          | c when Array.mem c [| ' '; '\t'; '('; ')'; ';' |] ->
+            Buffer.add_char buff c;
             aux true (i + 1)
           | c ->
             Buffer.add_char buff c;
@@ -121,6 +112,25 @@ module Sexp = struct
     done
   ;;
 
+  let skip_comments parser =
+    if peek parser = ';'
+    then
+      while read parser != '\n' do
+        ()
+      done
+  ;;
+
+  let skip_ignored parser =
+    let previous = ref (-1) in
+    let current = ref parser.index in
+    while !previous < !current do
+      previous := parser.index;
+      skip_whitespaces parser;
+      skip_comments parser;
+      current := parser.index
+    done
+  ;;
+
   let read_atom parser =
     let quoted = peek parser = '"' in
     if quoted then skip parser;
@@ -173,7 +183,7 @@ module Sexp = struct
   ;;
 
   let rec read_sexp parser =
-    skip_whitespaces parser;
+    skip_ignored parser;
     if peek parser = '('
     then (
       skip parser;
@@ -181,7 +191,7 @@ module Sexp = struct
       let items = Dynarray.create () in
       while peek parser != ')' do
         Dynarray.add_last items (read_sexp parser);
-        skip_whitespaces parser
+        skip_ignored parser
       done;
       expect parser ')';
       List (Dynarray.to_list items))

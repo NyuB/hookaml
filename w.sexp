@@ -9,4 +9,5 @@
     (projection ((describe "Last 3 commits") (repo .)
         (show (format (:hash (s |) :message (s |) :author)
             (commit_range HEAD~3 HEAD)))))
+    ; debug
 )

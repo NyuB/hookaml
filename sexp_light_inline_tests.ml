@@ -32,6 +32,16 @@ let%expect_test "Sexp of_string (success)" =
   print_parsed ~label:"spaces" "(\t a  b c\nd)";
   print_parsed ~label:"nested" "(())";
   print_parsed ~label:"nested" "(a (b (c d)) e ())";
+  print_parsed
+    ~label:"comment"
+    {|
+(a 
+b ; comment
+; comment
+c "; not a comment" d 
+; comment
+)
+  |};
   [%expect
     {|
     empty: ()
@@ -40,6 +50,7 @@ let%expect_test "Sexp of_string (success)" =
     spaces: (a b c d)
     nested: (())
     nested: (a (b (c d)) e ())
+    comment: (a b c "; not a comment" d)
     |}]
 ;;
 
