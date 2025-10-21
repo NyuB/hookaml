@@ -94,23 +94,7 @@ module Workspace = struct
   type item =
     | Projection of projection
     | Debug
-
-  let sexp_of_item = function
-    | Debug -> Sexplib.Sexp.Atom "debug"
-    | Projection projection ->
-      Sexplib.Sexp.(List [ Atom "projection"; sexp_of_projection projection ])
-  ;;
-
-  let item_of_sexp = function
-    | Sexplib.Sexp.Atom "Debug" -> Debug
-    | Sexplib.Sexp.(List [ Atom ("projection" | "Projection"); projection ]) ->
-      Projection (projection_of_sexp projection)
-    | s ->
-      raise
-      @@ Sexplib.Sexp_conv_error.conversion_error
-           "item_of_sexp"
-           (Sexplib.Sexp.to_string_hum s)
-  ;;
+  [@@deriving sexp_light]
 
   type t = item list [@@deriving sexp_light]
 end
