@@ -3,8 +3,6 @@ module Sexplib0 = Sexp_light
 module Sexplib = Sexp_light
 open Sexp_light.Std
 
-let sexp_repr_long = Sexplib.Sexp.to_string_hum
-
 module Git : sig
   (** [exec repository command] runs the git [command] in the given [repository]*)
   val exec : string -> string array -> string
@@ -365,12 +363,12 @@ let status workspace =
     List.map
       (fun (item : Workspace.item) ->
          match item with
-         | Debug -> Workspace.sexp_of_t workspace |> sexp_repr_long
+         | Debug -> Workspace.sexp_of_t workspace |> Sexplib.Sexp.to_string_hum
          | Projection p ->
            Printf.sprintf
              "%s:\n%s"
              p.describe
-             (show p.repo p.show |> Show.sexp_of_t |> sexp_repr_long))
+             (show p.repo p.show |> Show.sexp_of_t |> Sexplib.Sexp.to_string_hum))
       workspace
   in
   String.concat "\n\n" items_repr
