@@ -67,7 +67,7 @@ jobs:
       - name: Build executable
         run: |
           opam install . --deps-only
-          opam exec -- make install-gitst.exe INSTALL_ROOT=. INSTALL_SUFFIX=-${{ matrix.name }}
+          opam exec -- make install-gitst.exe INSTALL_ROOT=. INSTALL_SUFFIX=-${{ matrix.name }} PWSH=true
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
