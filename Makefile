@@ -8,11 +8,16 @@ default: fmt test
 os:
 	echo $(OS)
 
+ifeq ($(PWSH), true)
+CP_WIN=cp
+else
+CP_WIN=copy /Y
+endif
 # Build the executable then copy it under INSTALL_ROOT
 ifeq ($(OS), Windows_NT)
 install-%.exe:
 	dune build ./$*.exe
-	copy _build/default/$*.exe $(INSTALL_ROOT)/$*$(INSTALL_SUFFIX).exe
+	$(CP_WIN) _build\default\$*.exe $(INSTALL_ROOT)\$*$(INSTALL_SUFFIX).exe
 else
 install-%.exe:
 	dune build ./$*.exe
