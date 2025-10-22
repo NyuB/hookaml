@@ -19,7 +19,14 @@
  (name hookaml)
  (synopsis "VCS scripting")
  (description "VCS scripting")
- (depends ocaml dune (ocamlformat :with-test) sexplib)
+ (depends
+  ocaml
+  dune
+  ppxlib
+  (ocamlformat :with-test)
+  (ppx_expect :with-test)
+  (ppx_sexp_conv :with-test)
+  (sexplib :with-test))
  (tags ()))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

@@ -11,8 +11,11 @@ bug-reports: "https://github.com/NyuB/hookaml/issues"
 depends: [
   "ocaml"
   "dune" {>= "3.16"}
+  "ppxlib"
   "ocamlformat" {with-test}
-  "sexplib"
+  "ppx_expect" {with-test}
+  "ppx_sexp_conv" {with-test}
+  "sexplib" {with-test}
   "odoc" {with-doc}
 ]
 build: [
