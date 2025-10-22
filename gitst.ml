@@ -23,6 +23,71 @@ end = struct
   ;;
 end
 
+module Defn : sig
+  type sexp = Sexplib.Sexp.t
+
+  val sexp_of_sexp : sexp -> sexp
+
+  type t
+  type defs
+
+  val empty : defs
+  val define : defs -> string -> string list -> sexp -> defs
+  val get : defs -> string -> t option
+  val apply : t -> sexp list -> sexp
+
+  type application = string * string list
+
+  val application_of_sexp : sexp -> application
+  val sexp_of_application : application -> sexp
+end = struct
+  type sexp = Sexplib.Sexp.t
+
+  let sexp_of_sexp = Fun.id
+
+  type t =
+    { params : string list
+    ; fn : sexp
+    }
+
+  module StringMap = Map.Make (String)
+
+  type defs = t StringMap.t
+  type env = sexp StringMap.t
+
+  let empty = StringMap.empty
+  let define defs name params fn = StringMap.add name { params; fn } defs
+  let get defs name = StringMap.find_opt name defs
+
+  let rec expand (env : env) (sexp : Sexplib.Sexp.t) =
+    match sexp with
+    | Atom a as atom -> StringMap.find_opt a env |> Option.value ~default:atom
+    | List l -> Sexplib.Sexp.List (List.map (expand env) l)
+  ;;
+
+  let apply t args =
+    let env = List.combine t.params args |> StringMap.of_list in
+    expand env t.fn
+  ;;
+
+  type application = string * string list
+
+  let sexp_of_application (f, args) =
+    Sexplib.Sexp.List (sexp_of_string f :: List.map sexp_of_string args)
+  ;;
+
+  let application_of_sexp = function
+    | Sexplib.Sexp.List (Atom f :: args) ->
+      ( f
+      , List.map
+          (function
+            | Sexplib.Sexp.Atom a -> a
+            | _ -> failwith "Expected an atom")
+          args )
+    | _ -> failwith "Expected a list of atom"
+  ;;
+end
+
 (** Description of your workspace *)
 module Workspace = struct
   type commit_ref =
@@ -93,6 +158,8 @@ module Workspace = struct
 
   type item =
     | Projection of projection
+    | Defn of string * string list * Defn.sexp
+    | Apply of Defn.application
     | Debug
   [@@deriving sexp_light]
 
@@ -342,20 +409,35 @@ let rec show repo (s : Workspace.show) : Show.t =
     |> List.of_seq
 ;;
 
+let rec execute_workspace_item
+          (workspace : Workspace.t)
+          ((defs : Defn.defs), (reprs : string list))
+          (item : Workspace.item)
+  =
+  match item with
+  | Defn (name, params, body) -> Defn.define defs name params body, reprs
+  | Apply (name, args) ->
+    (match Defn.get defs name with
+     | None -> defs, Printf.sprintf "(Unknown function %s)" name :: reprs
+     | Some f ->
+       Defn.apply f (List.map sexp_of_string args)
+       |> Workspace.item_of_sexp
+       |> execute_workspace_item workspace (defs, reprs))
+  | Debug -> defs, (Workspace.sexp_of_t workspace |> Sexplib.Sexp.to_string_hum) :: reprs
+  | Projection p ->
+    ( defs
+    , Printf.sprintf
+        "%s:\n%s"
+        p.describe
+        (show p.repo p.show |> Show.sexp_of_t |> Sexplib.Sexp.to_string_hum)
+      :: reprs )
+;;
+
 let status workspace =
-  let items_repr =
-    List.map
-      (fun (item : Workspace.item) ->
-         match item with
-         | Debug -> Workspace.sexp_of_t workspace |> Sexplib.Sexp.to_string_hum
-         | Projection p ->
-           Printf.sprintf
-             "%s:\n%s"
-             p.describe
-             (show p.repo p.show |> Show.sexp_of_t |> Sexplib.Sexp.to_string_hum))
-      workspace
+  let _, items_repr =
+    List.fold_left (execute_workspace_item workspace) (Defn.empty, []) workspace
   in
-  String.concat "\n\n" items_repr
+  String.concat "\n\n" (List.rev items_repr)
 ;;
 
 (* read/write/main machinery *)
@@ -385,8 +467,8 @@ let expand_repos workspace_file workspace =
   List.map
     Workspace.(
       function
-      | Debug -> Debug
-      | Projection p -> Workspace.Projection (expand_repo workspace_file p))
+      | Projection p -> Workspace.Projection (expand_repo workspace_file p)
+      | any -> any)
     workspace
 ;;
 
