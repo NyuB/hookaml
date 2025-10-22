@@ -2,9 +2,10 @@
   $ show_workspace() { gitst "$1" workspace.out; cat workspace.out; }
 # Setup
   $ echo "workspace.*" > .gitignore
-  $ git init
+  $ git init -b main
   Initialized empty Git repository in $TESTCASE_ROOT/.git/
   $ git config user.name "Brice Decaestecker"
+  $ git config user.email "NyuB@github.com"
   $ touch workspace.out
 # Some commits
   $ git commit --allow-empty -m "Root" > /dev/null
