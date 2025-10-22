@@ -2,9 +2,10 @@
   $ show_workspace() { gitst "$1" workspace.out; cat workspace.out; }
 # Setup
   $ echo "workspace.*" > .gitignore
-  $ git init
+  $ git init -b main
   Initialized empty Git repository in $TESTCASE_ROOT/.git/
-  $ git config user.name "Brice Decaestecker"
+  $ git config user.name "Fitz Chivalry"
+  $ git config user.email "fitz@castelcerf.com"
   $ touch workspace.out
 # Modify worktree
   $ touch README.md
@@ -32,4 +33,4 @@
   $ git commit --allow-empty -m "fixup this above" > /dev/null
   $ show_workspace contains.sexp
   Last 3 commits:
-  ("Brice Decaestecker | fixup this above")
+  ("Fitz Chivalry | fixup this above")

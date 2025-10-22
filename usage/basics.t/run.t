@@ -3,8 +3,10 @@
   $ show_workspace() { gitst $1 workspace.out; cat workspace.out; }
 
 # Single repo examples
-  $ git init
+  $ git init -b main
   Initialized empty Git repository in $TESTCASE_ROOT/.git/
+  $ git config user.name "Legolas"
+  $ git config user.email "legolas@mid.earth"
   $ echo "workspace.*" > .gitignore
   $ cat workspace.sexp
   (
@@ -49,25 +51,29 @@
 
 # Multi repo test
   $ mkdir A
-  $ git init A
+  $ git init -b main A
   Initialized empty Git repository in $TESTCASE_ROOT/A/.git/
+  $ git -C A config user.name "Aragorn"
+  $ git -C A config user.email "aragorn@mid.earth"
   $ touch A/a.txt
   $ cd A
   $ echo "workspace.*" > .gitignore
   $ add_and_commit "Root" .gitignore
-  $ git mkb my_branch
+  $ git checkout -b my_branch
   Switched to a new branch 'my_branch'
   $ add_and_commit "A" a.txt
   $ cd ..
 
   $ mkdir B
-  $ git init B
+  $ git init -b main B
   Initialized empty Git repository in $TESTCASE_ROOT/B/.git/
+  $ git -C B config user.name "Gimli"
+  $ git -C B config user.email "gimli@mid.earth"
   $ touch B/b.txt
   $ cd B
   $ echo "workspace.*" > .gitignore
   $ add_and_commit "Root" .gitignore
-  $ git mkb my_branch
+  $ git checkout -b my_branch
   Switched to a new branch 'my_branch'
   $ add_and_commit "B" b.txt
   $ cd ..
