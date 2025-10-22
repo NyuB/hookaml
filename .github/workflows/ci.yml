@@ -1,0 +1,105 @@
+name: CI
+run-name: ${{ github.event.inputs.name }}
+
+on:
+  # Triggers the workflow on push or pull request events
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "main" ]
+
+  # Manual trigger for release
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Release name'
+        required: true
+        default: 'snapshot'
+      text:
+        description: 'Release description'
+        required: true
+        default: 'Snapshot release of the main branch'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.3
+
+      - run: opam install . --deps-only --with-test
+
+      - name: Build
+        run: |
+          opam exec -- make build
+
+      - name: Tests
+        run: |
+          opam exec -- make test
+
+  release-artifacts:
+      # Only if manually triggered
+      needs: [validate]
+      if: github.event_name == 'workflow_dispatch'
+      strategy:
+        matrix:
+          os: [ubuntu, windows]
+          include:
+            - os: windows
+              name: windows
+            - os: ubuntu
+              name: linux
+
+      runs-on: ${{ matrix.os }}-latest
+      steps:
+      - uses: actions/checkout@v4
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.3
+
+      - name: Build executable
+        run: |
+          opam install . --deps-only
+          opam exec -- make install-gitst.exe INSTALL_ROOT=. INSTALL_SUFFIX=-${{ matrix.name }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitst-${{ matrix.name }}
+          path: gitst-${{ matrix.name }}.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    # Only if manually triggered
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: [release-artifacts]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gitst-linux
+          path: ./
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: gitst-linux
+          path: ./
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.event.inputs.name }}
+          tag_name: ${{ github.event.inputs.name }}
+          target_commitish: main
+          body: ${{ github.event.inputs.text }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            gitst-windows.exe
+            gitst-linux.exe
