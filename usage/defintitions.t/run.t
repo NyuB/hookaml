@@ -13,8 +13,8 @@
 # Branch out
   $ alias escape_hashes="sed -E 's/(\"[0-9a-f]+)|(:hash [0-9a-f]+)/<hash>/'" # Escape hashes for test stability
   $ show_workspace def.sexp | escape_hashes
-  One:
+  Commits since HEAD~1:
   ("#2 Commit")
   
-  Two:
+  Commits since HEAD~2:
   ("#2 Commit" "#1 Commit")

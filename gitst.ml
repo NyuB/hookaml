@@ -88,6 +88,31 @@ end = struct
   ;;
 end
 
+module Description = struct
+  type t =
+    | String of string
+    | Format of string list
+
+  let sexp_of_t =
+    let open Sexplib.Sexp in
+    function
+    | String s -> Atom s
+    | Format sl -> List (List.map sexp_of_string sl)
+  ;;
+
+  let t_of_sexp =
+    let open Sexplib.Sexp in
+    function
+    | List format -> Format (List.map string_of_sexp format)
+    | Atom s -> String s
+  ;;
+
+  let string_of_t = function
+    | String s -> s
+    | Format sl -> String.concat "" sl
+  ;;
+end
+
 (** Description of your workspace *)
 module Workspace = struct
   type commit_ref =
@@ -151,7 +176,7 @@ module Workspace = struct
 
   type projection =
     { repo : string
-    ; describe : string
+    ; describe : Description.t
     ; show : show
     }
   [@@deriving sexp_light]
@@ -428,7 +453,7 @@ let rec execute_workspace_item
     ( defs
     , Printf.sprintf
         "%s:\n%s"
-        p.describe
+        (Description.string_of_t p.describe)
         (show p.repo p.show |> Show.sexp_of_t |> Sexplib.Sexp.to_string_hum)
       :: reprs )
 ;;
